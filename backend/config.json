@@ -1,0 +1,27 @@
+{
+  "provider": "flightradar24",
+  "location": null,
+  "adminPassword": "temppass123",
+  "slideshow": {
+    "interval": 10000,
+    "shuffle": true,
+    "fitMode": "cover"
+  },
+  "powerSaving": {
+    "reducedPollingWhenEmpty": true,
+    "emptyPollingInterval": 30000,
+    "maxConsecutiveEmptyPolls": 10
+  },
+  "area": {
+    "type": "rectangle",
+    "name": "San Francisco",
+    "northwest": {
+      "latitude": 37.666449,
+      "longitude": -122.659596
+    },
+    "southeast": {
+      "latitude": 37.56119,
+      "longitude": -122.527647
+    }
+  }
+}

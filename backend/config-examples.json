@@ -1,0 +1,55 @@
+{
+  "_comment": "Example configurations for flight tracking",
+  
+  "rectangle_example": {
+    "provider": "flightradar24",
+    "area": {
+      "type": "rectangle",
+      "name": "Brisbane Airport Area",
+      "northwest": {
+        "latitude": -27.4362175,
+        "longitude": 153.0566849
+      },
+      "southeast": {
+        "latitude": -27.4836336,
+        "longitude": 153.1184398
+      }
+    },
+    "refreshInterval": 10000,
+    "display": {
+      "units": "metric",
+      "showMap": true,
+      "animationSpeed": "smooth",
+      "maxFlightsDisplayed": 20,
+      "cardDisplayDuration": 30000
+    },
+    "slideshow": {
+      "interval": 10000,
+      "shuffle": true,
+      "fitMode": "cover"
+    }
+  },
+
+  "legacy_circle_example": {
+    "provider": "flightradar24",
+    "location": {
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "radius": 25,
+      "name": "San Francisco"
+    },
+    "refreshInterval": 10000,
+    "display": {
+      "units": "metric",
+      "showMap": true,
+      "animationSpeed": "smooth",
+      "maxFlightsDisplayed": 20,
+      "cardDisplayDuration": 30000
+    },
+    "slideshow": {
+      "interval": 10000,
+      "shuffle": true,
+      "fitMode": "cover"
+    }
+  }
+}

@@ -1,86 +1,167 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+
+import { samplePhotos } from '@/data/sampleFlights';
 import { Flight, Photo } from '@/types/flight';
+
 import FlightCard from './FlightCard';
 import PhotoSlideshow from './PhotoSlideshow';
-import { sampleFlights, samplePhotos } from '@/data/sampleFlights';
-import { Plane, Camera, RefreshCw } from 'lucide-react';
 
 type DisplayMode = 'flight' | 'photos';
 
-const FlightDisplay = () => {
-  const [mode, setMode] = useState<DisplayMode>('flight');
-  const [currentFlight, setCurrentFlight] = useState<Flight | null>(sampleFlights[0]);
-  const [flightIndex, setFlightIndex] = useState(0);
-  const [photos] = useState<Photo[]>(samplePhotos);
-  const [isDemo, setIsDemo] = useState(true);
+type FlightResponse = {
+  flights: Flight[];
+  source?: string;
+  timestamp?: number;
+};
 
-  // Cycle through demo flights every 15 seconds
+type PhotoApiItem = {
+  id: string;
+  url: string;
+  caption?: string;
+};
+
+type SettingsResponse = {
+  slideshow?: {
+    interval?: number;
+    shuffle?: boolean;
+    fitMode?: 'cover' | 'contain';
+  };
+};
+
+const emptyThreshold = 3;
+
+const fetchFlights = async (): Promise<FlightResponse> => {
+  const response = await fetch('/api/flights/overhead');
+  if (!response.ok) {
+    throw new Error('Failed to load flights');
+  }
+  return response.json();
+};
+
+const fetchPhotos = async (): Promise<PhotoApiItem[]> => {
+  const response = await fetch('/api/photos');
+  if (!response.ok) {
+    throw new Error('Failed to load photos');
+  }
+  return response.json();
+};
+
+const fetchSettings = async (): Promise<SettingsResponse> => {
+  const response = await fetch('/api/settings');
+  if (!response.ok) {
+    throw new Error('Failed to load settings');
+  }
+  return response.json();
+};
+
+const FlightDisplay = () => {
+  const [currentFlight, setCurrentFlight] = useState<Flight | null>(null);
+  const [flightIndex, setFlightIndex] = useState(0);
+  const [emptyStreak, setEmptyStreak] = useState(0);
+
+  const { data, isError, dataUpdatedAt } = useQuery({
+    queryKey: ['flights'],
+    queryFn: fetchFlights,
+    refetchInterval: (query) => {
+      const flightCount = query.state.data?.flights?.length || 0;
+      return flightCount > 0 ? 15000 : 30000;
+    },
+    refetchIntervalInBackground: true
+  });
+
+  const { data: photoData } = useQuery({
+    queryKey: ['photos'],
+    queryFn: fetchPhotos,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: true
+  });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchSettings,
+    refetchInterval: 60000,
+    refetchIntervalInBackground: true
+  });
+
+  const flights = data?.flights ?? [];
+  const hasFlights = flights.length > 0;
+  const photos: Photo[] = (photoData ?? samplePhotos).map((photo) => ({
+    id: photo.id,
+    src: (photo as PhotoApiItem).url ?? (photo as Photo).src,
+    caption: photo.caption
+  }));
+  const slideshowInterval = settingsData?.slideshow?.interval ?? 10000;
+  const slideshowShuffle = settingsData?.slideshow?.shuffle ?? true;
+  const slideshowFit = settingsData?.slideshow?.fitMode ?? 'cover';
+
   useEffect(() => {
-    if (!isDemo || mode !== 'flight') return;
+    if (isError) {
+      setEmptyStreak(emptyThreshold);
+      return;
+    }
+
+    setEmptyStreak((prev) => (hasFlights ? 0 : prev + 1));
+  }, [hasFlights, isError, dataUpdatedAt]);
+
+  useEffect(() => {
+    if (!hasFlights) {
+      setCurrentFlight(null);
+      return;
+    }
+
+    const safeIndex = Math.min(flightIndex, flights.length - 1);
+    setFlightIndex(safeIndex);
+    setCurrentFlight(flights[safeIndex]);
+  }, [flights, flightIndex, hasFlights]);
+
+  useEffect(() => {
+    if (!hasFlights || flights.length < 2) return;
 
     const timer = setInterval(() => {
       setFlightIndex((prev) => {
-        const next = (prev + 1) % sampleFlights.length;
-        setCurrentFlight(sampleFlights[next]);
+        const next = (prev + 1) % flights.length;
+        setCurrentFlight(flights[next]);
         return next;
       });
     }, 15000);
 
     return () => clearInterval(timer);
-  }, [isDemo, mode]);
+  }, [flights, hasFlights]);
 
-  // Toggle mode for demo purposes
-  const toggleMode = useCallback(() => {
-    setMode((prev) => (prev === 'flight' ? 'photos' : 'flight'));
-  }, []);
+  const mode: DisplayMode = hasFlights || emptyStreak < emptyThreshold ? 'flight' : 'photos';
 
   return (
     <div className="w-full h-screen bg-background overflow-hidden relative">
-      {/* Mode indicator and controls */}
-      <div className="absolute top-4 left-4 z-50 flex items-center gap-3">
-        <button
-          onClick={toggleMode}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/80 backdrop-blur-sm border border-border/50 hover:bg-secondary transition-colors"
-        >
-          {mode === 'flight' ? (
-            <>
-              <Camera className="w-4 h-4 text-primary" />
-              <span className="text-sm text-foreground/80">View Photos</span>
-            </>
-          ) : (
-            <>
-              <Plane className="w-4 h-4 text-primary" />
-              <span className="text-sm text-foreground/80">View Flights</span>
-            </>
-          )}
-        </button>
-        
-        {isDemo && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-aviation-amber/20 border border-aviation-amber/30">
-            <RefreshCw className="w-3 h-3 text-aviation-amber animate-spin" style={{ animationDuration: '3s' }} />
-            <span className="text-xs text-aviation-amber font-medium">DEMO MODE</span>
-          </div>
-        )}
-      </div>
-
       {/* Main display */}
       <div className="w-full h-full">
-        {mode === 'flight' && currentFlight ? (
-          <FlightCard flight={currentFlight} key={currentFlight.id} />
+        {mode === 'flight' ? (
+          currentFlight ? (
+            <FlightCard flight={currentFlight} key={currentFlight.id} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground text-lg">
+              Awaiting flight data
+            </div>
+          )
         ) : (
-          <PhotoSlideshow photos={photos} />
+          <PhotoSlideshow
+            photos={photos}
+            intervalMs={slideshowInterval}
+            shuffle={slideshowShuffle}
+            fitMode={slideshowFit}
+          />
         )}
       </div>
 
       {/* Flight pagination dots (when in flight mode) */}
-      {mode === 'flight' && sampleFlights.length > 1 && (
+      {mode === 'flight' && flights.length > 1 && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-          {sampleFlights.map((_, index) => (
+          {flights.map((_, index) => (
             <button
               key={index}
               onClick={() => {
                 setFlightIndex(index);
-                setCurrentFlight(sampleFlights[index]);
+                setCurrentFlight(flights[index]);
               }}
               className={`w-2 h-2 rounded-full transition-all duration-300 ${
                 index === flightIndex
