@@ -1,11 +1,19 @@
+import { Plane, ArrowDown, ArrowRight, ArrowUp, Gauge, Minus, Mountain } from 'lucide-react';
+
+import { getAircraftName, getAirline, getLogoUrl, extractAirlineCode } from '@/lib/airlines';
 import { Flight } from '@/types/flight';
-import { Plane, ArrowRight, Gauge, Mountain, ArrowDown, ArrowUp, Minus } from 'lucide-react';
 
 interface FlightCardProps {
   flight: Flight;
 }
 
 const FlightCard = ({ flight }: FlightCardProps) => {
+  const rawAirlineCode = flight.airline.iata || extractAirlineCode(flight.flightNumber);
+  const airlineCode = rawAirlineCode.length === 2 ? rawAirlineCode : extractAirlineCode(flight.flightNumber);
+  const airline = getAirline(airlineCode);
+  const airlineLogo = getLogoUrl(airlineCode);
+  const aircraftName = getAircraftName(flight.aircraft.icao || flight.aircraft.type);
+
   const getVerticalIcon = () => {
     if (flight.position.verticalSpeed > 100) return <ArrowUp className="w-5 h-5 text-aviation-green" />;
     if (flight.position.verticalSpeed < -100) return <ArrowDown className="w-5 h-5 text-aviation-amber" />;
@@ -24,18 +32,24 @@ const FlightCard = ({ flight }: FlightCardProps) => {
     <div className="w-full h-full flex flex-col justify-center items-center p-8 animate-fade-in">
       {/* Ambient glow effect */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[800px] h-[400px] bg-primary/10 rounded-full blur-[120px] animate-pulse-glow" />
+        <div
+          className="w-[800px] h-[400px] rounded-full blur-[120px] animate-pulse-glow"
+          style={{ backgroundColor: `${airline.color}1a` }}
+        />
       </div>
 
       <div className="relative z-10 w-full max-w-5xl">
         {/* Airline header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-6">
-            {flight.airline.logo ? (
-              <div className="w-24 h-24 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center p-4 oled-glow">
-                <img 
-                  src={flight.airline.logo} 
-                  alt={flight.airline.name}
+            {airlineLogo ? (
+              <div
+                className="w-24 h-24 rounded-2xl backdrop-blur-sm flex items-center justify-center p-4 oled-glow"
+                style={{ backgroundColor: `${airline.color}22` }}
+              >
+                <img
+                  src={airlineLogo}
+                  alt={airline.name}
                   className="max-w-full max-h-full object-contain filter brightness-110"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -43,16 +57,22 @@ const FlightCard = ({ flight }: FlightCardProps) => {
                 />
               </div>
             ) : (
-              <div className="w-24 h-24 rounded-2xl bg-secondary flex items-center justify-center oled-glow">
-                <Plane className="w-12 h-12 text-primary" />
+              <div
+                className="w-24 h-24 rounded-2xl flex items-center justify-center oled-glow"
+                style={{ backgroundColor: `${airline.color}22` }}
+              >
+                <Plane className="w-12 h-12" style={{ color: airline.color }} />
               </div>
             )}
             <div>
               <h1 className="text-5xl font-bold text-foreground tracking-tight">
-                {flight.airline.name}
+                {airline.name}
               </h1>
               <div className="flex items-center gap-3 mt-2">
-                <span className="font-mono text-2xl text-primary text-glow-cyan">
+                <span
+                  className="font-mono text-2xl text-glow-cyan"
+                  style={{ color: airline.color }}
+                >
                   {flight.flightNumber}
                 </span>
                 <span className="text-muted-foreground text-lg">•</span>
@@ -64,8 +84,11 @@ const FlightCard = ({ flight }: FlightCardProps) => {
           </div>
           
           {/* Status badge */}
-          <div className="px-5 py-2.5 rounded-full bg-aviation-amber/20 border border-aviation-amber/40">
-            <span className="text-aviation-amber font-semibold uppercase tracking-wider text-sm">
+          <div
+            className="px-5 py-2.5 rounded-full border"
+            style={{ backgroundColor: `${airline.color}22`, borderColor: `${airline.color}55` }}
+          >
+            <span className="font-semibold uppercase tracking-wider text-sm" style={{ color: airline.color }}>
               {flight.status}
             </span>
           </div>
@@ -92,13 +115,22 @@ const FlightCard = ({ flight }: FlightCardProps) => {
             {/* Flight path indicator */}
             <div className="flex-1 flex flex-col items-center px-8">
               <div className="flex items-center gap-3 w-full justify-center">
-                <div className="h-px bg-gradient-to-r from-transparent via-primary to-transparent flex-1" />
-                <Plane className="w-10 h-10 text-primary rotate-90 text-glow-cyan" />
-                <ArrowRight className="w-8 h-8 text-primary/60" />
-                <div className="h-px bg-gradient-to-r from-primary via-primary to-transparent flex-1" />
+                <div
+                  className="h-px flex-1"
+                  style={{ background: `linear-gradient(to right, transparent, ${airline.color}, transparent)` }}
+                />
+                <Plane
+                  className="w-10 h-10 rotate-90 text-glow-cyan"
+                  style={{ color: airline.color }}
+                />
+                <ArrowRight className="w-8 h-8" style={{ color: `${airline.color}99` }} />
+                <div
+                  className="h-px flex-1"
+                  style={{ background: `linear-gradient(to right, ${airline.color}, ${airline.color}, transparent)` }}
+                />
               </div>
               <div className="mt-4 font-mono text-sm text-muted-foreground">
-                {flight.aircraft.type}
+                {aircraftName}
               </div>
               <div className="font-mono text-xs text-muted-foreground/60">
                 {flight.aircraft.registration}
