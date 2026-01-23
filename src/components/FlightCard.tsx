@@ -29,12 +29,15 @@ const FlightCard = ({ flight }: FlightCardProps) => {
   };
 
   return (
-    <div className="w-full h-full flex flex-col justify-center items-center p-8 animate-fade-in">
+    <div 
+      className="w-full h-full flex flex-col justify-center items-center p-8 animate-fade-in"
+      style={{ '--airline-color': airline.color } as React.CSSProperties}
+    >
       {/* Ambient glow effect */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div
           className="w-[800px] h-[400px] rounded-full blur-[120px] animate-pulse-glow"
-          style={{ backgroundColor: `${airline.color}1a` }}
+          style={{ backgroundColor: `${airline.color}30` }}
         />
       </div>
 
@@ -95,7 +98,7 @@ const FlightCard = ({ flight }: FlightCardProps) => {
         </div>
 
         {/* Route display */}
-        <div className="card-glass rounded-3xl p-10 mb-8 oled-glow">
+        <div className="card-glass rounded-3xl p-10 mb-8" style={{ boxShadow: `0 0 60px -10px ${airline.color}40` }}>
           <div className="flex items-center justify-between">
             {/* Departure */}
             <div className="text-center flex-1">
@@ -157,9 +160,9 @@ const FlightCard = ({ flight }: FlightCardProps) => {
         {/* Flight data grid */}
         <div className="grid grid-cols-4 gap-4">
           {/* Altitude */}
-          <div className="card-glass rounded-2xl p-6 text-center">
+          <div className="card-glass rounded-2xl p-6 text-center" style={{ boxShadow: `0 0 30px -8px ${airline.color}30` }}>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Mountain className="w-5 h-5 text-primary/70" />
+              <Mountain className="w-5 h-5" style={{ color: `${airline.color}aa` }} />
               <span className="text-sm text-muted-foreground uppercase tracking-wider">Altitude</span>
             </div>
             <div className="font-mono text-4xl font-bold text-foreground">
@@ -168,9 +171,9 @@ const FlightCard = ({ flight }: FlightCardProps) => {
           </div>
 
           {/* Speed */}
-          <div className="card-glass rounded-2xl p-6 text-center">
+          <div className="card-glass rounded-2xl p-6 text-center" style={{ boxShadow: `0 0 30px -8px ${airline.color}30` }}>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Gauge className="w-5 h-5 text-primary/70" />
+              <Gauge className="w-5 h-5" style={{ color: `${airline.color}aa` }} />
               <span className="text-sm text-muted-foreground uppercase tracking-wider">Speed</span>
             </div>
             <div className="font-mono text-4xl font-bold text-foreground">
@@ -179,7 +182,7 @@ const FlightCard = ({ flight }: FlightCardProps) => {
           </div>
 
           {/* Vertical Speed */}
-          <div className="card-glass rounded-2xl p-6 text-center">
+          <div className="card-glass rounded-2xl p-6 text-center" style={{ boxShadow: `0 0 30px -8px ${airline.color}30` }}>
             <div className="flex items-center justify-center gap-2 mb-2">
               {getVerticalIcon()}
               <span className="text-sm text-muted-foreground uppercase tracking-wider">V/S</span>
@@ -191,9 +194,9 @@ const FlightCard = ({ flight }: FlightCardProps) => {
           </div>
 
           {/* Heading */}
-          <div className="card-glass rounded-2xl p-6 text-center">
+          <div className="card-glass rounded-2xl p-6 text-center" style={{ boxShadow: `0 0 30px -8px ${airline.color}30` }}>
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Plane className="w-5 h-5 text-primary/70 rotate-45" style={{ transform: `rotate(${flight.position.heading}deg)` }} />
+              <Plane className="w-5 h-5" style={{ color: `${airline.color}aa`, transform: `rotate(${flight.position.heading}deg)` }} />
               <span className="text-sm text-muted-foreground uppercase tracking-wider">Heading</span>
             </div>
             <div className="font-mono text-4xl font-bold text-foreground">
