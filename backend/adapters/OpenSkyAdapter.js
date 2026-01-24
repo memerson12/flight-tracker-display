@@ -94,6 +94,54 @@ class OpenSkyAdapter extends FlightAdapter {
     }
 
     /**
+     * Get flights in a specific rectangular area using OpenSky API
+     * @param {number} north - Northern boundary latitude
+     * @param {number} south - Southern boundary latitude
+     * @param {number} west - Western boundary longitude
+     * @param {number} east - Eastern boundary longitude
+     * @param {Object} options - Additional options for metadata
+     * @returns {Promise<Object>} Standardized flight data
+     */
+    async getFlightsInBounds(north, south, west, east, options = {}) {
+        try {
+            const token = await this.getAccessToken();
+
+            console.log(`OpenSky: Fetching flights for bounds ${north}, ${south}, ${west}, ${east}`);
+
+            const response = await axios.get(`${this.apiUrl}/states/all`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'User-Agent': 'Flight-Tracker/1.0'
+                },
+                params: {
+                    lamin: south,
+                    lamax: north,
+                    lomin: west,
+                    lomax: east
+                },
+                timeout: 10000
+            });
+
+            const centerLat = (north + south) / 2;
+            const centerLon = (east + west) / 2;
+            const latDiff = north - south;
+            const lonDiff = east - west;
+            const radius = Math.sqrt(latDiff * latDiff + lonDiff * lonDiff) * 111000 / 2;
+
+            return this.transformFlightData(response.data, {
+                center: options.center || { lat: centerLat, lon: centerLon },
+                radius: options.radius || radius,
+                location: options.location || `OpenSky Rectangle (${north.toFixed(4)}, ${west.toFixed(4)}) to (${south.toFixed(4)}, ${east.toFixed(4)})`,
+                bounds: { north, south, west, east }
+            });
+
+        } catch (error) {
+            console.error('OpenSky API error:', error.response?.data || error.message);
+            throw new Error(`OpenSky API failed: ${error.message}`);
+        }
+    }
+
+    /**
      * Get detailed flight information for an aircraft
      * @param {string} icao24 - ICAO24 aircraft identifier
      * @returns {Promise<Object>} Flight details

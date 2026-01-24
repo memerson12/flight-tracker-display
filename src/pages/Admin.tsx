@@ -466,10 +466,9 @@ const Admin = () => {
     setToken('');
   };
 
-  const handleUpload = async (file: File, caption: string) => {
+  const handleUpload = async (files: File[]) => {
     const formData = new FormData();
-    formData.append('file', file);
-    if (caption) formData.append('caption', caption);
+    files.forEach((file) => formData.append('files', file));
 
     const response = await fetch('/api/photos', {
       method: 'POST',
@@ -889,11 +888,6 @@ const Admin = () => {
                     <img src={photo.thumb || photo.url} alt={photo.caption || 'Photo'} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 space-y-3">
-                    <Input
-                      defaultValue={photo.caption || ''}
-                      placeholder="Caption"
-                      onBlur={(event) => handleUpdatePhoto(photo.id, { caption: event.target.value })}
-                    />
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <Switch
@@ -931,18 +925,16 @@ const Admin = () => {
   );
 };
 
-const PhotoUpload = ({ onUpload }: { onUpload: (file: File, caption: string) => Promise<void> }) => {
-  const [caption, setCaption] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const PhotoUpload = ({ onUpload }: { onUpload: (files: File[]) => Promise<void> }) => {
+  const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setUploading(true);
     try {
-      await onUpload(file, caption);
-      setCaption('');
-      setFile(null);
+      await onUpload(files);
+      setFiles([]);
     } finally {
       setUploading(false);
     }
@@ -953,15 +945,11 @@ const PhotoUpload = ({ onUpload }: { onUpload: (file: File, caption: string) => 
       <Input
         type="file"
         accept="image/*"
-        onChange={(event) => setFile(event.target.files?.[0] || null)}
+        multiple
+        onChange={(event) => setFiles(Array.from(event.target.files || []))}
       />
-      <Input
-        placeholder="Caption (optional)"
-        value={caption}
-        onChange={(event) => setCaption(event.target.value)}
-      />
-      <Button onClick={handleSubmit} disabled={!file || uploading}>
-        {uploading ? 'Uploading...' : 'Upload'}
+      <Button onClick={handleSubmit} disabled={files.length === 0 || uploading}>
+        {uploading ? 'Uploading...' : 'Upload photos'}
       </Button>
     </div>
   );

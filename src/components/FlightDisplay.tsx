@@ -140,7 +140,7 @@ const FlightDisplay = () => {
             <FlightCard flight={currentFlight} key={currentFlight.id} />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground text-lg">
-              Awaiting flight data
+               Looking for flights overhead...
             </div>
           )
         ) : (

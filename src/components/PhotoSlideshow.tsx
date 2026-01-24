@@ -23,6 +23,22 @@ const PhotoSlideshow = ({
   const [dotsCorner, setDotsCorner] = useState<'left' | 'right'>('right');
   const [drift, setDrift] = useState({ x: 0, y: 0 });
   const swapGuardRef = useRef(false);
+  const shuffleQueueRef = useRef<number[]>([]);
+
+  const shuffleIndices = (indices: number[]) => {
+    const next = [...indices];
+    for (let i = next.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+  };
+
+  const refillShuffleQueue = (excludeIndex: number) => {
+    const indices = Array.from({ length: photos.length }, (_, index) => index)
+      .filter((index) => index !== excludeIndex);
+    shuffleQueueRef.current = shuffleIndices(indices);
+  };
 
   const pickNextIndex = (excludeIndex: number) => {
     if (!shuffle) {
@@ -33,9 +49,13 @@ const PhotoSlideshow = ({
       return excludeIndex === 0 ? 1 : 0;
     }
 
-    let next = excludeIndex;
-    while (next === excludeIndex) {
-      next = Math.floor(Math.random() * photos.length);
+    if (shuffleQueueRef.current.length === 0) {
+      refillShuffleQueue(excludeIndex);
+    }
+
+    const next = shuffleQueueRef.current.shift();
+    if (next === undefined) {
+      return excludeIndex;
     }
     return next;
   };
@@ -44,6 +64,7 @@ const PhotoSlideshow = ({
     if (photos.length === 0) return;
     setActiveLayer('A');
     setLayerAIndex(0);
+    shuffleQueueRef.current = [];
     const upcoming = photos.length > 1 ? pickNextIndex(0) : 0;
     setLayerBIndex(upcoming);
     setHiddenReady(false);

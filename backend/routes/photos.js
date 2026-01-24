@@ -47,67 +47,77 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/photos (admin)
-router.post('/', adminAuth, uploadLimiter, upload.single('file'), async (req, res) => {
+router.post('/', adminAuth, uploadLimiter, upload.fields([
+  { name: 'files', maxCount: 20 },
+  { name: 'file', maxCount: 20 }
+]), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Missing file' });
+    const uploadedFiles = [
+      ...(req.files?.files || []),
+      ...(req.files?.file || [])
+    ];
+
+    if (uploadedFiles.length === 0) return res.status(400).json({ error: 'Missing files' });
 
     // Multer's fileFilter will reject unsupported types; detect and return proper code
     if (req.fileValidationError) {
-      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      for (const file of uploadedFiles) {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      }
       return res.status(400).json({ error: 'Unsupported file type' });
     }
 
-  const id = randomUUID();
-    const ext = req.file.originalname.split('.').pop().toLowerCase();
-    const filename = `${id}.${ext}`;
-    const dest = path.join(PHOTOS_DIR, filename);
+    const created = [];
 
-    // Re-encode/resize to limit dimensions and strip metadata
-    try {
-      await sharp(req.file.path)
-        .resize({ width: 3840, height: 2160, fit: 'inside' })
-        .toFile(dest);
-    } catch (err) {
-      // Clean up tmp file
-      try { fs.unlinkSync(req.file.path); } catch (e) {}
-      if (err && err.code === 'ENOSPC') return res.status(503).json({ error: 'No space left on device' });
-      console.error('sharp processing error', err.message);
-      return res.status(500).json({ error: 'Image processing failed' });
+    for (const file of uploadedFiles) {
+      const id = randomUUID();
+      const ext = file.originalname.split('.').pop().toLowerCase();
+      const filename = `${id}.${ext}`;
+      const dest = path.join(PHOTOS_DIR, filename);
+
+      try {
+        await sharp(file.path)
+          .resize({ width: 3840, height: 2160, fit: 'inside' })
+          .toFile(dest);
+      } catch (err) {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+        if (err && err.code === 'ENOSPC') return res.status(503).json({ error: 'No space left on device' });
+        console.error('sharp processing error', err.message);
+        return res.status(500).json({ error: 'Image processing failed' });
+      }
+
+      const thumbName = `${id}.webp`;
+      const thumbPath = path.join(THUMBS_DIR, thumbName);
+      try {
+        await sharp(dest)
+          .resize({ width: 800, height: 800, fit: 'cover' })
+          .webp({ quality: 80 })
+          .toFile(thumbPath);
+      } catch (err) {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+        try { fs.unlinkSync(dest); } catch (e) {}
+        if (err && err.code === 'ENOSPC') return res.status(503).json({ error: 'No space left on device' });
+        console.error('sharp thumbnail error', err.message);
+        return res.status(500).json({ error: 'Thumbnail generation failed' });
+      }
+
+      try { fs.unlinkSync(file.path); } catch (e) {}
+
+      const meta = {
+        id,
+        filename: filename,
+        url: `/photos/${filename}`,
+        thumb: `/photos/thumbs/${thumbName}`,
+        caption: '',
+        order: Date.now(),
+        enabled: true,
+        uploadedAt: new Date().toISOString()
+      };
+
+      created.push(metadataStore.add(meta));
     }
 
-    // Create thumbnail
-    const thumbName = `${id}.webp`;
-    const thumbPath = path.join(THUMBS_DIR, thumbName);
-    try {
-      await sharp(dest)
-        .resize({ width: 800, height: 800, fit: 'cover' })
-        .webp({ quality: 80 })
-        .toFile(thumbPath);
-    } catch (err) {
-      try { fs.unlinkSync(req.file.path); } catch (e) {}
-      try { fs.unlinkSync(dest); } catch (e) {}
-      if (err && err.code === 'ENOSPC') return res.status(503).json({ error: 'No space left on device' });
-      console.error('sharp thumbnail error', err.message);
-      return res.status(500).json({ error: 'Thumbnail generation failed' });
-    }
-
-    // Remove tmp upload
-    try { fs.unlinkSync(req.file.path); } catch(e){}
-
-    const meta = {
-      id,
-      filename: filename,
-      url: `/photos/${filename}`,
-      thumb: `/photos/thumbs/${thumbName}`,
-      caption: req.body.caption || '',
-      order: Date.now(),
-      enabled: true,
-      uploadedAt: new Date().toISOString()
-    };
-
-    metadataStore.add(meta);
-
-    return res.status(201).json(meta);
+    return res.status(201).json(created);
   } catch (err) {
     // Multer fileFilter throws custom error
     if (err && err.message === 'UNSUPPORTED_FILE_TYPE') {
