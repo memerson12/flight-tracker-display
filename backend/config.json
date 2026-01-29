@@ -15,12 +15,12 @@
     "type": "rectangle",
     "name": "Brisbane Airport, Queensland, Australia",
     "northwest": {
-      "latitude": -27.3592,
-      "longitude": 153.040707
+      "latitude": -27.332044,
+      "longitude": 153.03406
     },
     "southeast": {
-      "latitude": -27.482891,
-      "longitude": 153.213358
+      "latitude": -27.452044,
+      "longitude": 153.19406
     }
   }
 }

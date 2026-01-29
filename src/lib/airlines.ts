@@ -8,9 +8,9 @@ export type AirlineInfo = {
 const logoBaseUrl = 'https://www.gstatic.com/flights/airline_logos/70px/';
 
 const airlines: Record<string, AirlineInfo> = {
-  AA: { name: 'American Airlines', color: '#0074C8', region: 'North America', alliance: 'oneworld' },
+  AA: { name: 'American Airlines', color: '#C73530', region: 'North America', alliance: 'oneworld' },
   UA: { name: 'United Airlines', color: '#0033A1', region: 'North America', alliance: 'Star Alliance' },
-  DL: { name: 'Delta Air Lines', color: '#003366', region: 'North America', alliance: 'SkyTeam' },
+  DL: { name: 'Delta Air Lines', color: '#D2343E', region: 'North America', alliance: 'SkyTeam' },
   WN: { name: 'Southwest Airlines', color: '#304CB2', region: 'North America', alliance: null },
   B6: { name: 'JetBlue Airways', color: '#0F4C96', region: 'North America', alliance: null },
   AS: { name: 'Alaska Airlines', color: '#00467F', region: 'North America', alliance: null },
@@ -50,6 +50,7 @@ const airlines: Record<string, AirlineInfo> = {
   JQ: { name: 'Jetstar Airways', color: '#FF6600', region: 'Oceania', alliance: null },
   VA: { name: 'Virgin Australia', color: '#E40520', region: 'Oceania', alliance: null },
   NZ: { name: 'Air New Zealand', color: '#003F7F', region: 'Oceania', alliance: 'Star Alliance' },
+  QQ: { name: 'Alliance Airlines', color: '#F6C94C', region: 'Oceania', alliance: null },
 
   SA: { name: 'South African Airways', color: '#006DB7', region: 'Africa', alliance: 'Star Alliance' },
   ET: { name: 'Ethiopian Airlines', color: '#00A651', region: 'Africa', alliance: 'Star Alliance' },
