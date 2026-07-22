@@ -6,6 +6,14 @@
     "shuffle": true,
     "fitMode": "contain"
   },
+  "windowPosition": {
+    "enabled": true,
+    "address": "85 Macquarie Street, Teneriffe QLD 4005 Australia",
+    "latitude": -27.4582173,
+    "longitude": 153.0503689,
+    "bearing": 90,
+    "viewAngle": 90
+  },
   "powerSaving": {
     "reducedPollingWhenEmpty": true,
     "emptyPollingInterval": 30000,

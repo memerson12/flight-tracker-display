@@ -8,9 +8,11 @@ import {
   mergeFlightSnapshots
 } from '@/lib/flightDisplayState';
 import { Flight, Photo } from '@/types/flight';
+import { SettingsResponse } from '@/types/settings';
 
 import FlightCard from './FlightCard';
 import PhotoSlideshow from './PhotoSlideshow';
+import WindowPositionRail from './WindowPositionRail';
 
 type FlightResponse = {
   flights: Flight[];
@@ -22,14 +24,6 @@ type PhotoApiItem = {
   id: string;
   url: string;
   caption?: string;
-};
-
-type SettingsResponse = {
-  slideshow?: {
-    interval?: number;
-    shuffle?: boolean;
-    fitMode?: 'cover' | 'contain';
-  };
 };
 
 type FlightLayers = {
@@ -155,7 +149,7 @@ const FlightDisplay = () => {
   const { data: settingsData } = useQuery({
     queryKey: ['settings'],
     queryFn: fetchSettings,
-    refetchInterval: 60000,
+    refetchInterval: 10000,
     refetchIntervalInBackground: true
   });
 
@@ -252,6 +246,10 @@ const FlightDisplay = () => {
         aria-hidden={!showFlightLayer}
       >
         <FlightStage flight={currentFlight} isLingering={!hasLiveFlights && showFlightLayer} />
+
+        {currentFlight && settingsData?.windowPosition?.enabled && (
+          <WindowPositionRail flight={currentFlight} settings={settingsData.windowPosition} />
+        )}
 
         {displayFlights.length > 1 && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 w-44">

@@ -6,6 +6,10 @@ const cookieParser = require('cookie-parser');
 const { createFlightAdapter, validateProviderConfig } = require('./adapters');
 const { normalizeFlightData } = require('./lib/flightNormalizer');
 const adminAuth = require('./middleware/adminAuth');
+const {
+    defaultSlideshowSettings,
+    normalizeWindowPositionSettings
+} = require('./lib/displaySettings');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -14,12 +18,6 @@ const PORT = process.env.PORT || 8000;
 const CONFIG_PATH = path.join(__dirname, 'config.json');
 let config = null;
 let flightAdapter = null;
-
-const defaultSlideshowSettings = {
-    interval: 10000,
-    shuffle: true,
-    fitMode: 'cover'
-};
 
 // Load configuration on startup
 function loadConfig() {
@@ -30,6 +28,7 @@ function loadConfig() {
         if (!config.slideshow) {
             config.slideshow = { ...defaultSlideshowSettings };
         }
+        config.windowPosition = normalizeWindowPositionSettings(config.windowPosition);
         
         // Determine provider (config.json takes precedence over env var)
         const provider = config.provider || process.env.FLIGHT_PROVIDER || 'flightradar24';
@@ -145,7 +144,8 @@ app.get('/api/settings', (req, res) => {
     }
 
     const slideshow = { ...defaultSlideshowSettings, ...(config.slideshow || {}) };
-    return res.json({ slideshow });
+    const windowPosition = normalizeWindowPositionSettings(config.windowPosition);
+    return res.json({ slideshow, windowPosition });
 });
 
 app.put('/api/settings', adminAuth, (req, res) => {
@@ -155,18 +155,25 @@ app.put('/api/settings', adminAuth, (req, res) => {
         }
 
         const next = { ...config };
-        const slideshow = req.body?.slideshow || {};
+        const slideshow = req.body?.slideshow;
+        if (slideshow) {
+            next.slideshow = {
+                interval: Number.isFinite(Number(slideshow.interval)) ? Number(slideshow.interval) : defaultSlideshowSettings.interval,
+                shuffle: slideshow.shuffle === undefined ? defaultSlideshowSettings.shuffle : Boolean(slideshow.shuffle),
+                fitMode: slideshow.fitMode === 'contain' ? 'contain' : defaultSlideshowSettings.fitMode
+            };
+        } else if (!next.slideshow) {
+            next.slideshow = { ...defaultSlideshowSettings };
+        }
 
-        next.slideshow = {
-            interval: Number.isFinite(Number(slideshow.interval)) ? Number(slideshow.interval) : defaultSlideshowSettings.interval,
-            shuffle: slideshow.shuffle === undefined ? defaultSlideshowSettings.shuffle : Boolean(slideshow.shuffle),
-            fitMode: slideshow.fitMode === 'contain' ? 'contain' : defaultSlideshowSettings.fitMode
-        };
+        next.windowPosition = req.body?.windowPosition
+            ? normalizeWindowPositionSettings(req.body.windowPosition, next.windowPosition)
+            : normalizeWindowPositionSettings(next.windowPosition);
 
         persistConfig(next);
         reloadConfig(next);
 
-        return res.json({ slideshow: next.slideshow });
+        return res.json({ slideshow: next.slideshow, windowPosition: next.windowPosition });
     } catch (error) {
         console.error('Failed to update settings:', error.message);
         return res.status(500).json({ error: 'Failed to update settings' });

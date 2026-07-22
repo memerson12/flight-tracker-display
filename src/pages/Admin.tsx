@@ -6,6 +6,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { SettingsResponse } from '@/types/settings';
 
 type AdminPhoto = {
   id: string;
@@ -14,14 +15,6 @@ type AdminPhoto = {
   caption?: string;
   ord?: number;
   enabled?: boolean;
-};
-
-type SettingsResponse = {
-  slideshow?: {
-    interval?: number;
-    shuffle?: boolean;
-    fitMode?: 'cover' | 'contain';
-  };
 };
 
 type ConfigResponse = {
@@ -117,6 +110,15 @@ const Admin = () => {
   const [slideshowInterval, setSlideshowInterval] = useState(10000);
   const [slideshowShuffle, setSlideshowShuffle] = useState(true);
   const [slideshowFit, setSlideshowFit] = useState<'cover' | 'contain'>('cover');
+  const [windowPositionEnabled, setWindowPositionEnabled] = useState(false);
+  const [observerAddress, setObserverAddress] = useState('');
+  const [observerLatitude, setObserverLatitude] = useState('');
+  const [observerLongitude, setObserverLongitude] = useState('');
+  const [windowBearing, setWindowBearing] = useState('90');
+  const [windowViewAngle, setWindowViewAngle] = useState('90');
+  const [observerStatus, setObserverStatus] = useState('');
+  const [observerResolving, setObserverResolving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
 
   const [provider, setProvider] = useState('flightradar24');
   const [locationMode, setLocationMode] = useState<'circle' | 'rectangle'>('circle');
@@ -219,10 +221,20 @@ const Admin = () => {
   });
 
   useEffect(() => {
-    if (!settingsData?.slideshow) return;
-    setSlideshowInterval(settingsData.slideshow.interval ?? 10000);
-    setSlideshowShuffle(settingsData.slideshow.shuffle ?? true);
-    setSlideshowFit(settingsData.slideshow.fitMode ?? 'cover');
+    if (settingsData?.slideshow) {
+      setSlideshowInterval(settingsData.slideshow.interval ?? 10000);
+      setSlideshowShuffle(settingsData.slideshow.shuffle ?? true);
+      setSlideshowFit(settingsData.slideshow.fitMode ?? 'cover');
+    }
+
+    if (settingsData?.windowPosition) {
+      setWindowPositionEnabled(settingsData.windowPosition.enabled ?? false);
+      setObserverAddress(settingsData.windowPosition.address ?? '');
+      setObserverLatitude(settingsData.windowPosition.latitude == null ? '' : String(settingsData.windowPosition.latitude));
+      setObserverLongitude(settingsData.windowPosition.longitude == null ? '' : String(settingsData.windowPosition.longitude));
+      setWindowBearing(String(settingsData.windowPosition.bearing ?? 90));
+      setWindowViewAngle(String(settingsData.windowPosition.viewAngle ?? 90));
+    }
   }, [settingsData]);
 
   useEffect(() => {
@@ -525,6 +537,22 @@ const Admin = () => {
   };
 
   const handleSaveSettings = async () => {
+    const parsedLatitude = Number(observerLatitude);
+    const parsedLongitude = Number(observerLongitude);
+    if (
+      windowPositionEnabled
+      && (
+        observerLatitude === ''
+        || observerLongitude === ''
+        || !Number.isFinite(parsedLatitude)
+        || !Number.isFinite(parsedLongitude)
+      )
+    ) {
+      setSettingsMessage('Resolve the display address before enabling the position indicator.');
+      return;
+    }
+
+    setSettingsMessage('Saving...');
     const response = await fetch('/api/settings', {
       method: 'PUT',
       headers: {
@@ -536,6 +564,14 @@ const Admin = () => {
           interval: Number(slideshowInterval),
           shuffle: slideshowShuffle,
           fitMode: slideshowFit
+        },
+        windowPosition: {
+          enabled: windowPositionEnabled,
+          address: observerAddress.trim(),
+          latitude: observerLatitude === '' ? null : parsedLatitude,
+          longitude: observerLongitude === '' ? null : parsedLongitude,
+          bearing: Number(windowBearing),
+          viewAngle: Number(windowViewAngle)
         }
       })
     });
@@ -545,6 +581,43 @@ const Admin = () => {
     }
 
     await refetchSettings();
+    setSettingsMessage('Display settings saved.');
+  };
+
+  const handleResolveObserverAddress = async () => {
+    if (!mapboxToken) {
+      setObserverStatus('Missing Mapbox token. The address cannot be resolved on this device.');
+      return;
+    }
+    if (!observerAddress.trim()) {
+      setObserverStatus('Enter an address first.');
+      return;
+    }
+
+    setObserverResolving(true);
+    setObserverStatus('Resolving address...');
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(observerAddress)}.json?access_token=${mapboxToken}&limit=1&country=au`
+      );
+      if (!response.ok) throw new Error('Address lookup failed');
+      const data = await response.json();
+      const feature = data.features?.[0] as MapboxFeature | undefined;
+      if (!feature) {
+        setObserverStatus('No matching address found.');
+        return;
+      }
+
+      const [longitude, latitude] = feature.center;
+      setObserverAddress(feature.place_name);
+      setObserverLatitude(String(latitude));
+      setObserverLongitude(String(longitude));
+      setObserverStatus(`Resolved to ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+    } catch (error) {
+      setObserverStatus('Failed to resolve the address.');
+    } finally {
+      setObserverResolving(false);
+    }
   };
 
   const handleSaveConfig = async () => {
@@ -734,6 +807,83 @@ const Admin = () => {
               <Switch checked={slideshowShuffle} onCheckedChange={setSlideshowShuffle} />
             </div>
           </div>
+        </section>
+
+        <section className="card-glass rounded-3xl p-8 space-y-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Window Position Indicator</h2>
+              <p className="text-muted-foreground mt-1">Show where the aircraft appears across the physical window.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">Show on flight screen</span>
+              <Switch
+                aria-label="Show window position indicator"
+                checked={windowPositionEnabled}
+                onCheckedChange={setWindowPositionEnabled}
+              />
+              <Button onClick={handleSaveSettings}>Save display position</Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_0.6fr] gap-6">
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Viewer address</label>
+              <div className="flex gap-2">
+                <Input
+                  value={observerAddress}
+                  placeholder="85 Macquarie Street, Teneriffe QLD 4005 Australia"
+                  onChange={(event) => {
+                    setObserverAddress(event.target.value);
+                    setObserverLatitude('');
+                    setObserverLongitude('');
+                    setObserverStatus('Address changed — resolve it before saving.');
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleResolveObserverAddress();
+                    }
+                  }}
+                />
+                <Button variant="secondary" onClick={handleResolveObserverAddress} disabled={observerResolving}>
+                  {observerResolving ? 'Resolving' : 'Resolve address'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {observerStatus || (observerLatitude && observerLongitude
+                  ? `Saved coordinates: ${observerLatitude}, ${observerLongitude}`
+                  : 'The resolved coordinates are saved so the display does not need to geocode continuously.')}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Looking direction (°)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="359"
+                  value={windowBearing}
+                  onChange={(event) => setWindowBearing(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">90° is east</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Window view (°)</label>
+                <Input
+                  type="number"
+                  min="10"
+                  max="180"
+                  value={windowViewAngle}
+                  onChange={(event) => setWindowViewAngle(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">90° spans NE to SE</p>
+              </div>
+            </div>
+          </div>
+
+          {settingsMessage && <p className="text-sm text-primary">{settingsMessage}</p>}
         </section>
 
         <section className="card-glass rounded-3xl p-8 space-y-6">
