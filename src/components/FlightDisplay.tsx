@@ -41,7 +41,7 @@ type FlightLayers = {
 const EMPTY_FLIGHTS: Flight[] = [];
 const FLIGHT_ROTATION_MS = 15_000;
 const FLIGHT_LINGER_MS = 45_000;
-const FLIGHT_CROSSFADE_MS = 800;
+const FLIGHT_SWIPE_MS = 1100;
 
 const fetchFlights = async (): Promise<FlightResponse> => {
   const response = await fetch('/api/flights/overhead');
@@ -104,7 +104,7 @@ const FlightStage = ({ flight, isLingering }: { flight: Flight | null; isLingeri
           ? { ...previousLayers, previous: null }
           : previousLayers
       ));
-    }, FLIGHT_CROSSFADE_MS);
+    }, FLIGHT_SWIPE_MS);
 
     return () => window.clearTimeout(timer);
   }, [layers.previous, layers.sequence]);

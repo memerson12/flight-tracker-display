@@ -130,11 +130,11 @@
   }
 
   .flight-card-enter {
-    animation: flightCardEnter 800ms cubic-bezier(0.55, 0, 0.75, 1) both;
+    animation: flightCardEnter 1100ms cubic-bezier(0.55, 0, 0.75, 1) both;
   }
 
   .flight-card-exit {
-    animation: flightCardExit 800ms cubic-bezier(0.55, 0, 0.75, 1) both;
+    animation: flightCardExit 1100ms cubic-bezier(0.55, 0, 0.75, 1) both;
   }
 
   .flight-ambient-glow {
