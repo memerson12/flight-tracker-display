@@ -123,6 +123,37 @@ const boundsToPolygon = (bounds: RectangleBounds): GeoJSON.Feature<GeoJSON.Polyg
   properties: {}
 });
 
+const createViewerMarker = (map: mapboxgl.Map, coordinates: [number, number]) => {
+  const markerElement = document.createElement('div');
+  markerElement.className = 'relative flex h-7 w-7 items-center justify-center';
+  markerElement.title = 'Viewer location';
+  markerElement.setAttribute('aria-label', 'Viewer location');
+
+  const halo = document.createElement('div');
+  halo.className = 'absolute inset-0 rounded-full bg-aviation-amber/25 ring-2 ring-aviation-amber/50';
+  const dot = document.createElement('div');
+  dot.className = 'relative h-3 w-3 rounded-full bg-aviation-amber border-2 border-background shadow-[0_0_12px_rgba(255,186,73,0.95)]';
+  markerElement.append(halo, dot);
+
+  return new mapboxgl.Marker({ element: markerElement })
+    .setLngLat(coordinates)
+    .addTo(map);
+};
+
+const fitMapToTrackingArea = (
+  map: mapboxgl.Map,
+  bounds: RectangleBounds,
+  viewerCoordinates: [number, number] | null,
+  animate = false
+) => {
+  const mapBounds = new mapboxgl.LngLatBounds(
+    [bounds.west, bounds.south],
+    [bounds.east, bounds.north]
+  );
+  if (viewerCoordinates) mapBounds.extend(viewerCoordinates);
+  map.fitBounds(mapBounds, { padding: 50, animate, duration: animate ? 700 : 0 });
+};
+
 const Admin = () => {
   const [token, setToken] = useState(() => localStorage.getItem('adminToken') || '');
   const [passwordInput, setPasswordInput] = useState('');
@@ -165,6 +196,8 @@ const Admin = () => {
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const viewerMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const viewerCoordinatesRef = useRef<[number, number] | null>(null);
   const rectangleLayerId = 'selection-rect';
   const rectangleFillId = 'selection-fill';
   const rectangleOutlineId = 'selection-outline';
@@ -180,6 +213,15 @@ const Admin = () => {
   const [rectBounds, setRectBounds] = useState<RectangleBounds>(defaultBounds);
   const rectBoundsRef = useRef(rectBounds);
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+
+  const parsedObserverLatitude = Number(observerLatitude);
+  const parsedObserverLongitude = Number(observerLongitude);
+  viewerCoordinatesRef.current = observerLatitude !== ''
+    && observerLongitude !== ''
+    && Number.isFinite(parsedObserverLatitude)
+    && Number.isFinite(parsedObserverLongitude)
+    ? [parsedObserverLongitude, parsedObserverLatitude]
+    : null;
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
@@ -419,13 +461,11 @@ const Admin = () => {
         cornerMarkersRef.current[key] = marker;
       });
 
-      map.fitBounds(
-        [
-          [rectBounds.west, rectBounds.south],
-          [rectBounds.east, rectBounds.north]
-        ],
-        { padding: 40, animate: false }
-      );
+      const viewerCoordinates = viewerCoordinatesRef.current;
+      if (viewerCoordinates && !viewerMarkerRef.current) {
+        viewerMarkerRef.current = createViewerMarker(map, viewerCoordinates);
+      }
+      fitMapToTrackingArea(map, rectBounds, viewerCoordinates);
     };
 
     const ensureRectangleLayers = () => {
@@ -488,6 +528,8 @@ const Admin = () => {
     return () => {
       Object.values(cornerMarkersRef.current).forEach((marker) => marker.remove());
       cornerMarkersRef.current = {};
+      viewerMarkerRef.current?.remove();
+      viewerMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -515,6 +557,25 @@ const Admin = () => {
       marker.setLngLat(coords as [number, number]);
     });
   }, [rectBounds]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const viewerCoordinates = viewerCoordinatesRef.current;
+    if (!viewerCoordinates) {
+      viewerMarkerRef.current?.remove();
+      viewerMarkerRef.current = null;
+      return;
+    }
+
+    if (!viewerMarkerRef.current) {
+      viewerMarkerRef.current = createViewerMarker(map, viewerCoordinates);
+    } else {
+      viewerMarkerRef.current.setLngLat(viewerCoordinates);
+    }
+    fitMapToTrackingArea(map, rectBoundsRef.current, viewerCoordinates, true);
+  }, [observerLatitude, observerLongitude]);
 
   const sortedPhotos = useMemo(() => {
     const photos = photosData || [];
@@ -1046,10 +1107,10 @@ const Admin = () => {
         <section className="card-glass rounded-3xl p-8 space-y-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-2xl font-semibold">Window Position Indicator</h2>
-              <p className="text-muted-foreground mt-1">Show where the aircraft appears across the physical window.</p>
+              <h2 className="text-2xl font-semibold">Location + Display Position</h2>
+              <p className="text-muted-foreground mt-1">Configure the tracked airspace and where the viewer sits relative to it.</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-muted-foreground">Show on flight screen</span>
               <Switch
                 aria-label="Show window position indicator"
@@ -1057,9 +1118,17 @@ const Admin = () => {
                 onCheckedChange={setWindowPositionEnabled}
               />
               <Button onClick={handleSaveSettings} disabled={settingsSaving}>
-                {settingsSaving ? 'Saving...' : 'Save display position'}
+                {settingsSaving ? 'Saving...' : 'Save viewer'}
+              </Button>
+              <Button onClick={handleSaveConfig} disabled={configSaving}>
+                {configSaving ? 'Saving...' : 'Save tracking area'}
               </Button>
             </div>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-medium">Viewer + Window Position</h3>
+            <p className="text-sm text-muted-foreground mt-1">The amber dot on the map previews the viewer location.</p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_0.6fr] gap-6">
@@ -1140,50 +1209,48 @@ const Admin = () => {
               {settingsMessage}
             </p>
           )}
-        </section>
 
-        <section className="card-glass rounded-3xl p-8 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Location + Provider</h2>
-            <Button onClick={handleSaveConfig} disabled={configSaving}>
-              {configSaving ? 'Saving...' : 'Save location'}
-            </Button>
-          </div>
-          {configMessage && (
-            <p className={`text-sm ${configMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
-              {configMessage}
-            </p>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Provider</label>
-              <select
-                value={provider}
-                onChange={(event) => setProvider(event.target.value)}
-                className="w-full h-10 rounded-md bg-background border border-border px-3"
-              >
-                <option value="flightradar24">FlightRadar24</option>
-                <option value="opensky">OpenSky</option>
-              </select>
+          <div className="border-t border-border/60 pt-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium">Flight Tracking Area</h3>
+              <p className="text-sm text-muted-foreground mt-1">Choose the provider and the airspace shown on the display.</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Tracking mode</label>
-              <select
-                value={locationMode}
-                onChange={(event) => setLocationMode(event.target.value as 'circle' | 'rectangle')}
-                className="w-full h-10 rounded-md bg-background border border-border px-3"
-              >
-                <option value="circle">Circle radius</option>
-                <option value="rectangle">Rectangle bounds</option>
-              </select>
-            </div>
-          </div>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Location name</label>
-              <Input value={locationName} onChange={(event) => setLocationName(event.target.value)} />
+            {configMessage && (
+              <p className={`text-sm ${configMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
+                {configMessage}
+              </p>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Provider</label>
+                <select
+                  value={provider}
+                  onChange={(event) => setProvider(event.target.value)}
+                  className="w-full h-10 rounded-md bg-background border border-border px-3"
+                >
+                  <option value="flightradar24">FlightRadar24</option>
+                  <option value="opensky">OpenSky</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Tracking mode</label>
+                <select
+                  value={locationMode}
+                  onChange={(event) => setLocationMode(event.target.value as 'circle' | 'rectangle')}
+                  className="w-full h-10 rounded-md bg-background border border-border px-3"
+                >
+                  <option value="circle">Circle radius</option>
+                  <option value="rectangle">Rectangle bounds</option>
+                </select>
+              </div>
             </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Location name</label>
+                <Input value={locationName} onChange={(event) => setLocationName(event.target.value)} />
+              </div>
 
             {locationMode === 'circle' ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1278,10 +1345,21 @@ const Admin = () => {
                   </div>
                   <div className="relative h-80 rounded-2xl overflow-hidden border border-border/60">
                     <div ref={mapContainerRef} className="absolute inset-0" />
+                    <div className="absolute left-3 top-3 z-10 flex flex-wrap gap-2 pointer-events-none">
+                      <span className="flex items-center gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
+                        <span className="h-2.5 w-2.5 rounded-full bg-aviation-amber shadow-[0_0_8px_rgba(255,186,73,0.9)]" />
+                        Viewer
+                      </span>
+                      <span className="flex items-center gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
+                        <span className="h-2.5 w-4 rounded-sm border border-sky-400 bg-sky-400/20" />
+                        Tracking area
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
+            </div>
           </div>
         </section>
 
