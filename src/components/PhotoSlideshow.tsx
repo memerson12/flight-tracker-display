@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { formatClockDate, formatClockTime } from '@/lib/timeSettings';
 import { Photo } from '@/types/flight';
+import { ClockSettings } from '@/types/settings';
 
 interface PhotoSlideshowProps {
   photos: Photo[];
@@ -8,6 +10,7 @@ interface PhotoSlideshowProps {
   fitMode?: 'cover' | 'contain';
   shuffle?: boolean;
   paused?: boolean;
+  clock?: ClockSettings;
 }
 
 type Corner = 'left' | 'right';
@@ -77,7 +80,8 @@ const PhotoSlideshow = ({
   intervalMs = 10000,
   fitMode = 'cover',
   shuffle = true,
-  paused = false
+  paused = false,
+  clock = { use24Hour: true }
 }: PhotoSlideshowProps) => {
   const [activeLayer, setActiveLayer] = useState<'A' | 'B'>('A');
   const [layerAIndex, setLayerAIndex] = useState(0);
@@ -244,13 +248,13 @@ const PhotoSlideshow = ({
         className={`absolute top-8 ${clockCorner === 'right' ? 'right-8' : 'left-8'} transition-all duration-700`}
         style={{ transform: `translate(${drift.x}px, ${drift.y}px)` }}
       >
-        <Clock align={clockCorner} />
+        <Clock align={clockCorner} settings={clock} />
       </div>
     </div>
   );
 };
 
-const Clock = ({ align }: { align: Corner }) => {
+const Clock = ({ align, settings }: { align: Corner; settings: ClockSettings }) => {
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -260,11 +264,11 @@ const Clock = ({ align }: { align: Corner }) => {
 
   return (
     <div className={align === 'right' ? 'text-right' : 'text-left'}>
-      <div className="font-mono text-5xl font-light text-white/80 tracking-wider">
-        {time.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+      <div className="font-mono text-5xl font-light text-white/80 tracking-wider uppercase">
+        {formatClockTime(time, settings)}
       </div>
       <div className="text-lg text-white/50 mt-1">
-        {time.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+        {formatClockDate(time, settings)}
       </div>
     </div>
   );

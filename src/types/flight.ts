@@ -34,6 +34,7 @@ export interface Flight {
     verticalSpeed: number; // feet per minute
     latitude: number;
     longitude: number;
+    observedAt?: number;
   };
   status: 'climbing' | 'descending' | 'cruising' | 'approaching' | 'landed';
 }

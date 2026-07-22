@@ -1,7 +1,7 @@
 const assert = require('assert');
 const test = require('node:test');
 
-const { normalizeWindowPositionSettings } = require('../lib/displaySettings');
+const { normalizeClockSettings, normalizeWindowPositionSettings } = require('../lib/displaySettings');
 
 test('preserves saved observer details while toggling the indicator off', () => {
     const existing = {
@@ -39,4 +39,16 @@ test('keeps missing observer coordinates empty', () => {
 
   assert.strictEqual(normalized.latitude, null);
   assert.strictEqual(normalized.longitude, null);
+});
+
+test('normalizes display clock preferences', () => {
+  assert.deepStrictEqual(normalizeClockSettings({
+    use24Hour: false,
+    timeZone: 'Australia/Brisbane'
+  }), {
+    use24Hour: false,
+    timeZone: 'Australia/Brisbane'
+  });
+
+  assert.strictEqual(normalizeClockSettings({ timeZone: 'Not/A_Time_Zone' }).timeZone, '');
 });

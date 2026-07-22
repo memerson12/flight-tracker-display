@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateBearing, mapBearingToWindow } from './windowPosition';
+import {
+  calculateBearing,
+  mapBearingToWindow,
+  normalizeEpochMilliseconds,
+  projectPosition
+} from './windowPosition';
 
 describe('window position mapping', () => {
   it('maps an east-facing 90 degree view from NE to SE', () => {
@@ -29,5 +34,19 @@ describe('window position mapping', () => {
     expect(positions[0]).toBeGreaterThan(90);
     expect(positions[1]).toBeCloseTo(50, 1);
     expect(positions[2]).toBeLessThan(10);
+  });
+
+  it('projects aircraft motion from heading and groundspeed between polls', () => {
+    const start = { latitude: -27.4582173, longitude: 153.075 };
+    const projected = projectPosition(start, 0, 180, 10_000);
+
+    expect(projected.latitude).toBeGreaterThan(start.latitude);
+    expect(projected.longitude).toBeCloseTo(start.longitude, 4);
+  });
+
+  it('caps projection time and accepts provider timestamps in seconds', () => {
+    const start = { latitude: 0, longitude: 0 };
+    expect(projectPosition(start, 90, 360, 60_000)).toEqual(projectPosition(start, 90, 360, 30_000));
+    expect(normalizeEpochMilliseconds(1_784_692_946)).toBe(1_784_692_946_000);
   });
 });

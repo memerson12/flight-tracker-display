@@ -13,7 +13,13 @@ export type WindowPositionSettings = {
   viewAngle?: number;
 };
 
+export type ClockSettings = {
+  use24Hour?: boolean;
+  timeZone?: string;
+};
+
 export type SettingsResponse = {
   slideshow?: SlideshowSettings;
   windowPosition?: WindowPositionSettings;
+  clock?: ClockSettings;
 };

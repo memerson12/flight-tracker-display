@@ -1,8 +1,15 @@
+import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plane } from 'lucide-react';
 
 import { getAirline, resolveAirlineCode } from '@/lib/airlines';
 import { getDisplayAccent } from '@/lib/displayColor';
-import { calculateBearing, getCompassLabel, mapBearingToWindow, normalizeBearing } from '@/lib/windowPosition';
+import {
+  calculateBearing,
+  getCompassLabel,
+  mapBearingToWindow,
+  normalizeBearing,
+  projectPosition
+} from '@/lib/windowPosition';
 import { Flight } from '@/types/flight';
 import { WindowPositionSettings } from '@/types/settings';
 
@@ -12,6 +19,13 @@ type WindowPositionRailProps = {
 };
 
 const WindowPositionRail = ({ flight, settings }: WindowPositionRailProps) => {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const latitude = settings.latitude == null ? Number.NaN : Number(settings.latitude);
   const longitude = settings.longitude == null ? Number.NaN : Number(settings.longitude);
   const centerBearing = normalizeBearing(Number(settings.bearing ?? 90));
@@ -21,9 +35,17 @@ const WindowPositionRail = ({ flight, settings }: WindowPositionRailProps) => {
     return null;
   }
 
+  const observedAt = flight.position.observedAt;
+  const projectedPosition = projectPosition(
+    { latitude: flight.position.latitude, longitude: flight.position.longitude },
+    flight.position.heading,
+    flight.position.speed,
+    observedAt ? now - observedAt : 0
+  );
+
   const bearing = calculateBearing(
     { latitude, longitude },
-    { latitude: flight.position.latitude, longitude: flight.position.longitude }
+    projectedPosition
   );
   const position = mapBearingToWindow(bearing, centerBearing, viewAngle);
   const minimumBearing = normalizeBearing(centerBearing - viewAngle / 2);
@@ -60,7 +82,7 @@ const WindowPositionRail = ({ flight, settings }: WindowPositionRailProps) => {
       </div>
 
       <div
-        className="absolute top-[1.2rem] flex flex-col items-center transition-[left] duration-1000 ease-out"
+        className="absolute top-[1.2rem] flex flex-col items-center transition-[left] duration-200 ease-linear"
         style={{ left: `${position.percent}%`, transform: markerTransform }}
       >
         <div

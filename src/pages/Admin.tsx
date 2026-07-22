@@ -6,6 +6,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { inferTimeZone, isValidTimeZone, resolveTimeZone } from '@/lib/timeSettings';
 import { SettingsResponse } from '@/types/settings';
 
 type AdminPhoto = {
@@ -45,6 +46,16 @@ type RectangleBounds = {
   west: number;
   east: number;
 };
+
+const commonTimeZones = [
+  'Australia/Brisbane',
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Australia/Adelaide',
+  'Australia/Perth',
+  'Pacific/Auckland',
+  'UTC'
+];
 
 const defaultBounds: RectangleBounds = {
   north: 37.82,
@@ -110,6 +121,8 @@ const Admin = () => {
   const [slideshowInterval, setSlideshowInterval] = useState(10000);
   const [slideshowShuffle, setSlideshowShuffle] = useState(true);
   const [slideshowFit, setSlideshowFit] = useState<'cover' | 'contain'>('cover');
+  const [clockUse24Hour, setClockUse24Hour] = useState(true);
+  const [clockTimeZone, setClockTimeZone] = useState('');
   const [windowPositionEnabled, setWindowPositionEnabled] = useState(false);
   const [observerAddress, setObserverAddress] = useState('');
   const [observerLatitude, setObserverLatitude] = useState('');
@@ -235,6 +248,13 @@ const Admin = () => {
       setWindowBearing(String(settingsData.windowPosition.bearing ?? 90));
       setWindowViewAngle(String(settingsData.windowPosition.viewAngle ?? 90));
     }
+
+    setClockUse24Hour(settingsData?.clock?.use24Hour ?? true);
+    setClockTimeZone(resolveTimeZone(
+      settingsData?.clock?.timeZone,
+      settingsData?.windowPosition?.latitude,
+      settingsData?.windowPosition?.longitude
+    ));
   }, [settingsData]);
 
   useEffect(() => {
@@ -539,6 +559,10 @@ const Admin = () => {
   const handleSaveSettings = async () => {
     const parsedLatitude = Number(observerLatitude);
     const parsedLongitude = Number(observerLongitude);
+    if (!isValidTimeZone(clockTimeZone)) {
+      setSettingsMessage('Enter a valid IANA time zone, such as Australia/Brisbane.');
+      return;
+    }
     if (
       windowPositionEnabled
       && (
@@ -572,6 +596,10 @@ const Admin = () => {
           longitude: observerLongitude === '' ? null : parsedLongitude,
           bearing: Number(windowBearing),
           viewAngle: Number(windowViewAngle)
+        },
+        clock: {
+          use24Hour: clockUse24Hour,
+          timeZone: clockTimeZone
         }
       })
     });
@@ -609,10 +637,14 @@ const Admin = () => {
       }
 
       const [longitude, latitude] = feature.center;
+      const inferredTimeZone = inferTimeZone(latitude, longitude);
       setObserverAddress(feature.place_name);
       setObserverLatitude(String(latitude));
       setObserverLongitude(String(longitude));
-      setObserverStatus(`Resolved to ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+      if (inferredTimeZone) setClockTimeZone(inferredTimeZone);
+      setObserverStatus(
+        `Resolved to ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${inferredTimeZone ? ` · ${inferredTimeZone}` : ''}`
+      );
     } catch (error) {
       setObserverStatus('Failed to resolve the address.');
     } finally {
@@ -805,6 +837,54 @@ const Admin = () => {
                 <p className="text-lg">Randomize order</p>
               </div>
               <Switch checked={slideshowShuffle} onCheckedChange={setSlideshowShuffle} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-[0.7fr_1.3fr] gap-6 border-t border-border/60 pt-6">
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm text-muted-foreground">Clock format</p>
+                <p className="text-lg">{clockUse24Hour ? '24-hour time' : '12-hour time'}</p>
+              </div>
+              <Switch
+                aria-label="Use 24-hour time"
+                checked={clockUse24Hour}
+                onCheckedChange={setClockUse24Hour}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-muted-foreground">Display time zone</label>
+              <div className="flex gap-2">
+                <Input
+                  list="display-time-zones"
+                  value={clockTimeZone}
+                  placeholder="Australia/Brisbane"
+                  onChange={(event) => setClockTimeZone(event.target.value)}
+                />
+                <datalist id="display-time-zones">
+                  {commonTimeZones.map((timeZone) => <option key={timeZone} value={timeZone} />)}
+                </datalist>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    const inferred = observerLatitude && observerLongitude
+                      ? inferTimeZone(Number(observerLatitude), Number(observerLongitude))
+                      : '';
+                    if (inferred) {
+                      setClockTimeZone(inferred);
+                      setSettingsMessage(`Time zone set from viewer location: ${inferred}`);
+                    } else {
+                      setSettingsMessage('Resolve the viewer address before detecting its time zone.');
+                    }
+                  }}
+                >
+                  From viewer
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Uses an IANA time zone. Resolving the viewer address updates this automatically.
+              </p>
             </div>
           </div>
         </section>

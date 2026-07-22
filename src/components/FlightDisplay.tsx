@@ -7,6 +7,8 @@ import {
   getRemainingLingerMs,
   mergeFlightSnapshots
 } from '@/lib/flightDisplayState';
+import { resolveTimeZone } from '@/lib/timeSettings';
+import { normalizeEpochMilliseconds } from '@/lib/windowPosition';
 import { Flight, Photo } from '@/types/flight';
 import { SettingsResponse } from '@/types/settings';
 
@@ -42,7 +44,15 @@ const fetchFlights = async (): Promise<FlightResponse> => {
   if (!response.ok) {
     throw new Error('Failed to load flights');
   }
-  return response.json();
+  const payload = await response.json() as FlightResponse;
+  const observedAt = normalizeEpochMilliseconds(payload.timestamp) ?? Date.now();
+  return {
+    ...payload,
+    flights: (payload.flights || []).map((flight) => ({
+      ...flight,
+      position: { ...flight.position, observedAt }
+    }))
+  };
 };
 
 const fetchPhotos = async (): Promise<PhotoApiItem[]> => {
@@ -180,6 +190,19 @@ const FlightDisplay = () => {
   const slideshowInterval = settingsData?.slideshow?.interval ?? 10000;
   const slideshowShuffle = settingsData?.slideshow?.shuffle ?? true;
   const slideshowFit = settingsData?.slideshow?.fitMode ?? 'cover';
+  const clockSettings = useMemo(() => ({
+    use24Hour: settingsData?.clock?.use24Hour ?? true,
+    timeZone: resolveTimeZone(
+      settingsData?.clock?.timeZone,
+      settingsData?.windowPosition?.latitude,
+      settingsData?.windowPosition?.longitude
+    )
+  }), [
+    settingsData?.clock?.timeZone,
+    settingsData?.clock?.use24Hour,
+    settingsData?.windowPosition?.latitude,
+    settingsData?.windowPosition?.longitude
+  ]);
 
   useEffect(() => {
     if (hasLiveFlights) {
@@ -238,6 +261,7 @@ const FlightDisplay = () => {
           shuffle={slideshowShuffle}
           fitMode={slideshowFit}
           paused={showFlightLayer}
+          clock={clockSettings}
         />
       </section>
 

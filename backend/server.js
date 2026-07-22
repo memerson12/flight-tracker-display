@@ -7,7 +7,9 @@ const { createFlightAdapter, validateProviderConfig } = require('./adapters');
 const { normalizeFlightData } = require('./lib/flightNormalizer');
 const adminAuth = require('./middleware/adminAuth');
 const {
+    defaultClockSettings,
     defaultSlideshowSettings,
+    normalizeClockSettings,
     normalizeWindowPositionSettings
 } = require('./lib/displaySettings');
 
@@ -29,6 +31,7 @@ function loadConfig() {
             config.slideshow = { ...defaultSlideshowSettings };
         }
         config.windowPosition = normalizeWindowPositionSettings(config.windowPosition);
+        config.clock = normalizeClockSettings(config.clock);
         
         // Determine provider (config.json takes precedence over env var)
         const provider = config.provider || process.env.FLIGHT_PROVIDER || 'flightradar24';
@@ -145,7 +148,8 @@ app.get('/api/settings', (req, res) => {
 
     const slideshow = { ...defaultSlideshowSettings, ...(config.slideshow || {}) };
     const windowPosition = normalizeWindowPositionSettings(config.windowPosition);
-    return res.json({ slideshow, windowPosition });
+    const clock = normalizeClockSettings(config.clock);
+    return res.json({ slideshow, windowPosition, clock });
 });
 
 app.put('/api/settings', adminAuth, (req, res) => {
@@ -170,10 +174,14 @@ app.put('/api/settings', adminAuth, (req, res) => {
             ? normalizeWindowPositionSettings(req.body.windowPosition, next.windowPosition)
             : normalizeWindowPositionSettings(next.windowPosition);
 
+        next.clock = req.body?.clock
+            ? normalizeClockSettings(req.body.clock, next.clock)
+            : normalizeClockSettings(next.clock || defaultClockSettings);
+
         persistConfig(next);
         reloadConfig(next);
 
-        return res.json({ slideshow: next.slideshow, windowPosition: next.windowPosition });
+        return res.json({ slideshow: next.slideshow, windowPosition: next.windowPosition, clock: next.clock });
     } catch (error) {
         console.error('Failed to update settings:', error.message);
         return res.status(500).json({ error: 'Failed to update settings' });

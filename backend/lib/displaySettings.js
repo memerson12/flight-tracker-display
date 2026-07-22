@@ -13,6 +13,11 @@ const defaultWindowPositionSettings = {
   viewAngle: 90
 };
 
+const defaultClockSettings = {
+  use24Hour: true,
+  timeZone: ''
+};
+
 const finiteOrNull = (value, minimum, maximum) => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -35,8 +40,29 @@ const normalizeWindowPositionSettings = (input = {}, existing = {}) => {
   };
 };
 
+const isValidTimeZone = (timeZone) => {
+  if (!timeZone) return false;
+  try {
+    new Intl.DateTimeFormat('en-AU', { timeZone }).format();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const normalizeClockSettings = (input = {}, existing = {}) => {
+  const merged = { ...defaultClockSettings, ...existing, ...input };
+  const timeZone = String(merged.timeZone || '').trim();
+  return {
+    use24Hour: merged.use24Hour === undefined ? true : Boolean(merged.use24Hour),
+    timeZone: isValidTimeZone(timeZone) ? timeZone : ''
+  };
+};
+
 module.exports = {
+  defaultClockSettings,
   defaultSlideshowSettings,
   defaultWindowPositionSettings,
+  normalizeClockSettings,
   normalizeWindowPositionSettings
 };
