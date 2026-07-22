@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
+import { buildMapboxGeocodingUrl } from '@/lib/mapboxGeocoding';
 import { inferTimeZone, isValidTimeZone, resolveTimeZone } from '@/lib/timeSettings';
 import { SettingsResponse } from '@/types/settings';
 
@@ -141,6 +142,8 @@ const Admin = () => {
   const [windowViewAngle, setWindowViewAngle] = useState('90');
   const [observerStatus, setObserverStatus] = useState('');
   const [observerResolving, setObserverResolving] = useState(false);
+  const [observerSuggestions, setObserverSuggestions] = useState<MapboxFeature[]>([]);
+  const [observerSearching, setObserverSearching] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
   const [settingsMessageIsError, setSettingsMessageIsError] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -294,6 +297,39 @@ const Admin = () => {
       syncRectangleFields(bounds);
     }
   }, [configData]);
+
+  useEffect(() => {
+    const query = observerAddress.trim();
+    if (!mapboxToken || query.length < 3 || observerLatitude || observerLongitude) {
+      setObserverSuggestions([]);
+      setObserverSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setObserverSearching(true);
+      try {
+        const response = await fetch(buildMapboxGeocodingUrl({
+          query,
+          accessToken: mapboxToken
+        }), { signal: controller.signal });
+        if (!response.ok) throw new Error('Address search failed');
+        const data = await response.json();
+        setObserverSuggestions(data.features || []);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setObserverSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) setObserverSearching(false);
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [mapboxToken, observerAddress, observerLatitude, observerLongitude]);
 
   useEffect(() => {
     if (locationMode !== 'rectangle') return;
@@ -680,6 +716,19 @@ const Admin = () => {
     }
   };
 
+  const handleSelectObserverAddress = (feature: MapboxFeature) => {
+    const [longitude, latitude] = feature.center;
+    const inferredTimeZone = inferTimeZone(latitude, longitude);
+    setObserverAddress(feature.place_name);
+    setObserverLatitude(String(latitude));
+    setObserverLongitude(String(longitude));
+    setObserverSuggestions([]);
+    if (inferredTimeZone) setClockTimeZone(inferredTimeZone);
+    setObserverStatus(
+      `Selected ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${inferredTimeZone ? ` · ${inferredTimeZone}` : ''}. Save display position to apply it.`
+    );
+  };
+
   const handleResolveObserverAddress = async () => {
     if (!mapboxToken) {
       setObserverStatus('Missing Mapbox token. The address cannot be resolved on this device.');
@@ -695,9 +744,12 @@ const Admin = () => {
     setObserverResolving(true);
     setObserverStatus('Resolving address...');
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(observerAddress)}.json?access_token=${mapboxToken}&limit=1&country=au`
-      );
+      const response = await fetch(buildMapboxGeocodingUrl({
+        query: observerAddress,
+        accessToken: mapboxToken,
+        limit: 1,
+        autocomplete: false
+      }));
       if (!response.ok) throw new Error('Address lookup failed');
       const data = await response.json();
       const feature = data.features?.[0] as MapboxFeature | undefined;
@@ -707,16 +759,8 @@ const Admin = () => {
         return;
       }
 
-      const [longitude, latitude] = feature.center;
-      const inferredTimeZone = inferTimeZone(latitude, longitude);
-      setObserverAddress(feature.place_name);
-      setObserverLatitude(String(latitude));
-      setObserverLongitude(String(longitude));
-      if (inferredTimeZone) setClockTimeZone(inferredTimeZone);
+      handleSelectObserverAddress(feature);
       toast.success('Viewer address resolved. Save display position to apply it.');
-      setObserverStatus(
-        `Resolved to ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${inferredTimeZone ? ` · ${inferredTimeZone}` : ''}`
-      );
     } catch (error) {
       setObserverStatus('Failed to resolve the address.');
       toast.error('Failed to resolve the viewer address.');
@@ -810,9 +854,10 @@ const Admin = () => {
     setSearchLoading(true);
     setMapError('');
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${mapboxToken}&limit=5`
-      );
+      const response = await fetch(buildMapboxGeocodingUrl({
+        query: searchQuery,
+        accessToken: mapboxToken
+      }));
       if (!response.ok) throw new Error('Search failed');
       const data = await response.json();
       setSearchResults(data.features || []);
@@ -1028,7 +1073,7 @@ const Admin = () => {
                     setObserverAddress(event.target.value);
                     setObserverLatitude('');
                     setObserverLongitude('');
-                    setObserverStatus('Address changed — resolve it before saving.');
+                    setObserverStatus('Choose a matching address below or resolve the typed address.');
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
@@ -1041,8 +1086,24 @@ const Admin = () => {
                   {observerResolving ? 'Resolving' : 'Resolve address'}
                 </Button>
               </div>
+              {observerSuggestions.length > 0 && (
+                <div className="border border-border rounded-xl p-2 max-h-48 overflow-auto bg-background" role="listbox" aria-label="Viewer address suggestions">
+                  {observerSuggestions.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      onClick={() => handleSelectObserverAddress(result)}
+                      className="block w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary text-sm"
+                    >
+                      {result.place_name}
+                    </button>
+                  ))}
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
-                {observerStatus || (observerLatitude && observerLongitude
+                {observerSearching ? 'Searching addresses…' : observerStatus || (observerLatitude && observerLongitude
                   ? `Saved coordinates: ${observerLatitude}, ${observerLongitude}`
                   : 'The resolved coordinates are saved so the display does not need to geocode continuously.')}
               </p>
