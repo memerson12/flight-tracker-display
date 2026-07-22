@@ -60,7 +60,6 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
-    overflow: hidden;
   }
 
   .font-mono {

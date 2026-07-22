@@ -764,7 +764,7 @@ const Admin = () => {
   }
 
   return (
-    <div className="h-screen overflow-y-auto bg-background text-foreground p-8">
+    <div className="min-h-screen bg-background text-foreground p-8">
       <div className="max-w-6xl mx-auto space-y-10">
         <header className="flex items-center justify-between">
           <div>
