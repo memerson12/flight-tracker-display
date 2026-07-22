@@ -228,7 +228,7 @@ const PhotoSlideshow = ({
       <div
         className="absolute bottom-8 flex gap-2 transition-all duration-700"
         style={indicatorIsPortrait
-          ? { left: clockCorner === 'right' ? '29%' : '71%', transform: `translate(-50%, 0) translate(${drift.x}px, ${drift.y}px)` }
+          ? { left: clockCorner === 'right' ? '46%' : '54%', transform: `translate(-50%, 0) translate(${drift.x}px, ${drift.y}px)` }
           : { [clockCorner]: '2rem', transform: `translate(${drift.x}px, ${drift.y}px)` }}
       >
         {photos.map((photo, index) => (

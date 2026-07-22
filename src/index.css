@@ -174,16 +174,16 @@
     position: absolute;
     inset: 0;
     display: flex;
+    justify-content: center;
+    transition: transform 700ms ease-in-out;
   }
 
   .photo-portrait-left {
-    justify-content: flex-start;
-    padding-left: 8vw;
+    transform: translate3d(-4vw, 0, 0);
   }
 
   .photo-portrait-right {
-    justify-content: flex-end;
-    padding-right: 8vw;
+    transform: translate3d(4vw, 0, 0);
   }
 }
 
