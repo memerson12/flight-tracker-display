@@ -5,6 +5,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
 import { inferTimeZone, isValidTimeZone, resolveTimeZone } from '@/lib/timeSettings';
 import { SettingsResponse } from '@/types/settings';
@@ -56,6 +57,15 @@ const commonTimeZones = [
   'Pacific/Auckland',
   'UTC'
 ];
+
+const getResponseError = async (response: Response, fallback: string) => {
+  try {
+    const body = await response.json();
+    return body?.error || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 const defaultBounds: RectangleBounds = {
   north: 37.82,
@@ -132,6 +142,12 @@ const Admin = () => {
   const [observerStatus, setObserverStatus] = useState('');
   const [observerResolving, setObserverResolving] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
+  const [settingsMessageIsError, setSettingsMessageIsError] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [configMessage, setConfigMessage] = useState('');
+  const [configMessageIsError, setConfigMessageIsError] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [photoActionId, setPhotoActionId] = useState<string | null>(null);
 
   const [provider, setProvider] = useState('flightradar24');
   const [locationMode, setLocationMode] = useState<'circle' | 'rectangle'>('circle');
@@ -499,23 +515,30 @@ const Admin = () => {
   };
 
   const handleUpload = async (files: File[]) => {
-    const formData = new FormData();
-    files.forEach((file) => formData.append('files', file));
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
 
-    const response = await fetch('/api/photos', {
-      method: 'POST',
-      headers: authHeaders,
-      body: formData
-    });
+      const response = await fetch('/api/photos', {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData
+      });
 
-    if (!response.ok) {
-      throw new Error('Upload failed');
+      if (!response.ok) {
+        throw new Error(await getResponseError(response, 'Upload failed'));
+      }
+
+      await refetchPhotos();
+      toast.success(`${files.length} photo${files.length === 1 ? '' : 's'} uploaded.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload failed';
+      toast.error(message);
+      throw error;
     }
-
-    await refetchPhotos();
   };
 
-  const handleUpdatePhoto = async (id: string, patch: Record<string, unknown>) => {
+  const updatePhoto = async (id: string, patch: Record<string, unknown>) => {
     const response = await fetch(`/api/photos/${id}`, {
       method: 'PUT',
       headers: {
@@ -526,23 +549,42 @@ const Admin = () => {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to update photo');
+      throw new Error(await getResponseError(response, 'Failed to update photo'));
     }
+  };
 
-    await refetchPhotos();
+  const handleUpdatePhoto = async (id: string, patch: Record<string, unknown>, successMessage = 'Photo updated.') => {
+    setPhotoActionId(id);
+    try {
+      await updatePhoto(id, patch);
+      await refetchPhotos();
+      toast.success(successMessage);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update photo');
+    } finally {
+      setPhotoActionId(null);
+    }
   };
 
   const handleDeletePhoto = async (id: string) => {
-    const response = await fetch(`/api/photos/${id}`, {
-      method: 'DELETE',
-      headers: authHeaders
-    });
+    setPhotoActionId(id);
+    try {
+      const response = await fetch(`/api/photos/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to delete photo');
+      if (!response.ok) {
+        throw new Error(await getResponseError(response, 'Failed to delete photo'));
+      }
+
+      await refetchPhotos();
+      toast.success('Photo deleted.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete photo');
+    } finally {
+      setPhotoActionId(null);
     }
-
-    await refetchPhotos();
   };
 
   const handleReorder = async (index: number, direction: 'up' | 'down') => {
@@ -552,8 +594,18 @@ const Admin = () => {
     const current = sortedPhotos[index];
     const target = sortedPhotos[targetIndex];
 
-    await handleUpdatePhoto(current.id, { order: target.ord || Date.now() });
-    await handleUpdatePhoto(target.id, { order: current.ord || Date.now() });
+    setPhotoActionId(current.id);
+    try {
+      await updatePhoto(current.id, { order: target.ord || Date.now() });
+      await updatePhoto(target.id, { order: current.ord || Date.now() });
+      await refetchPhotos();
+      toast.success(direction === 'up' ? 'Photo moved up.' : 'Photo moved down.');
+    } catch (error) {
+      await refetchPhotos();
+      toast.error(error instanceof Error ? error.message : 'Failed to reorder photos');
+    } finally {
+      setPhotoActionId(null);
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -561,6 +613,8 @@ const Admin = () => {
     const parsedLongitude = Number(observerLongitude);
     if (!isValidTimeZone(clockTimeZone)) {
       setSettingsMessage('Enter a valid IANA time zone, such as Australia/Brisbane.');
+      setSettingsMessageIsError(true);
+      toast.error('Enter a valid display time zone.');
       return;
     }
     if (
@@ -573,52 +627,68 @@ const Admin = () => {
       )
     ) {
       setSettingsMessage('Resolve the display address before enabling the position indicator.');
+      setSettingsMessageIsError(true);
+      toast.error('Resolve the viewer address before saving.');
       return;
     }
 
     setSettingsMessage('Saving...');
-    const response = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders
-      },
-      body: JSON.stringify({
-        slideshow: {
-          interval: Number(slideshowInterval),
-          shuffle: slideshowShuffle,
-          fitMode: slideshowFit
+    setSettingsMessageIsError(false);
+    setSettingsSaving(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders
         },
-        windowPosition: {
-          enabled: windowPositionEnabled,
-          address: observerAddress.trim(),
-          latitude: observerLatitude === '' ? null : parsedLatitude,
-          longitude: observerLongitude === '' ? null : parsedLongitude,
-          bearing: Number(windowBearing),
-          viewAngle: Number(windowViewAngle)
-        },
-        clock: {
-          use24Hour: clockUse24Hour,
-          timeZone: clockTimeZone
-        }
-      })
-    });
+        body: JSON.stringify({
+          slideshow: {
+            interval: Number(slideshowInterval),
+            shuffle: slideshowShuffle,
+            fitMode: slideshowFit
+          },
+          windowPosition: {
+            enabled: windowPositionEnabled,
+            address: observerAddress.trim(),
+            latitude: observerLatitude === '' ? null : parsedLatitude,
+            longitude: observerLongitude === '' ? null : parsedLongitude,
+            bearing: Number(windowBearing),
+            viewAngle: Number(windowViewAngle)
+          },
+          clock: {
+            use24Hour: clockUse24Hour,
+            timeZone: clockTimeZone
+          }
+        })
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to update settings');
+      if (!response.ok) {
+        throw new Error(await getResponseError(response, 'Failed to update display settings'));
+      }
+
+      await refetchSettings();
+      setSettingsMessage('Display settings saved.');
+      toast.success('Display settings saved.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update display settings';
+      setSettingsMessage(message);
+      setSettingsMessageIsError(true);
+      toast.error(message);
+    } finally {
+      setSettingsSaving(false);
     }
-
-    await refetchSettings();
-    setSettingsMessage('Display settings saved.');
   };
 
   const handleResolveObserverAddress = async () => {
     if (!mapboxToken) {
       setObserverStatus('Missing Mapbox token. The address cannot be resolved on this device.');
+      toast.error('Mapbox token is missing.');
       return;
     }
     if (!observerAddress.trim()) {
       setObserverStatus('Enter an address first.');
+      toast.error('Enter a viewer address first.');
       return;
     }
 
@@ -633,6 +703,7 @@ const Admin = () => {
       const feature = data.features?.[0] as MapboxFeature | undefined;
       if (!feature) {
         setObserverStatus('No matching address found.');
+        toast.error('No matching viewer address found.');
         return;
       }
 
@@ -642,17 +713,35 @@ const Admin = () => {
       setObserverLatitude(String(latitude));
       setObserverLongitude(String(longitude));
       if (inferredTimeZone) setClockTimeZone(inferredTimeZone);
+      toast.success('Viewer address resolved. Save display position to apply it.');
       setObserverStatus(
         `Resolved to ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${inferredTimeZone ? ` · ${inferredTimeZone}` : ''}`
       );
     } catch (error) {
       setObserverStatus('Failed to resolve the address.');
+      toast.error('Failed to resolve the viewer address.');
     } finally {
       setObserverResolving(false);
     }
   };
 
   const handleSaveConfig = async () => {
+    const numericValues = locationMode === 'circle'
+      ? [Number(latitude), Number(longitude), Number(radius)]
+      : [Number(nwLat), Number(nwLon), Number(seLat), Number(seLon)];
+    if (numericValues.some((value) => !Number.isFinite(value))) {
+      setConfigMessage('Enter valid numeric coordinates before saving.');
+      setConfigMessageIsError(true);
+      toast.error('Location contains invalid coordinates.');
+      return;
+    }
+    if (locationMode === 'circle' && Number(radius) <= 0) {
+      setConfigMessage('Radius must be greater than zero.');
+      setConfigMessageIsError(true);
+      toast.error('Radius must be greater than zero.');
+      return;
+    }
+
     const payload: ConfigResponse = {
       provider,
       location: null,
@@ -681,20 +770,34 @@ const Admin = () => {
       };
     }
 
-    const response = await fetch('/api/config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders
-      },
-      body: JSON.stringify(payload)
-    });
+    setConfigSaving(true);
+    setConfigMessage('Saving location...');
+    setConfigMessageIsError(false);
+    try {
+      const response = await fetch('/api/config', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders
+        },
+        body: JSON.stringify(payload)
+      });
 
-    if (!response.ok) {
-      throw new Error('Failed to update config');
+      if (!response.ok) {
+        throw new Error(await getResponseError(response, 'Failed to update location and provider'));
+      }
+
+      await refetchConfig();
+      setConfigMessage('Location and provider saved. Flight tracking is using the new area.');
+      toast.success('Location and provider saved.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update location and provider';
+      setConfigMessage(message);
+      setConfigMessageIsError(true);
+      toast.error(message);
+    } finally {
+      setConfigSaving(false);
     }
-
-    await refetchConfig();
   };
 
   const handleSearch = async () => {
@@ -809,7 +912,9 @@ const Admin = () => {
         <section className="card-glass rounded-3xl p-8 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Slideshow Settings</h2>
-            <Button onClick={handleSaveSettings}>Save settings</Button>
+            <Button onClick={handleSaveSettings} disabled={settingsSaving}>
+              {settingsSaving ? 'Saving...' : 'Save settings'}
+            </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-2">
@@ -874,8 +979,12 @@ const Admin = () => {
                     if (inferred) {
                       setClockTimeZone(inferred);
                       setSettingsMessage(`Time zone set from viewer location: ${inferred}`);
+                      setSettingsMessageIsError(false);
+                      toast.success(`Time zone changed to ${inferred}. Save settings to apply it.`);
                     } else {
                       setSettingsMessage('Resolve the viewer address before detecting its time zone.');
+                      setSettingsMessageIsError(true);
+                      toast.error('Resolve the viewer address first.');
                     }
                   }}
                 >
@@ -902,7 +1011,9 @@ const Admin = () => {
                 checked={windowPositionEnabled}
                 onCheckedChange={setWindowPositionEnabled}
               />
-              <Button onClick={handleSaveSettings}>Save display position</Button>
+              <Button onClick={handleSaveSettings} disabled={settingsSaving}>
+                {settingsSaving ? 'Saving...' : 'Save display position'}
+              </Button>
             </div>
           </div>
 
@@ -963,14 +1074,25 @@ const Admin = () => {
             </div>
           </div>
 
-          {settingsMessage && <p className="text-sm text-primary">{settingsMessage}</p>}
+          {settingsMessage && (
+            <p className={`text-sm ${settingsMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
+              {settingsMessage}
+            </p>
+          )}
         </section>
 
         <section className="card-glass rounded-3xl p-8 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Location + Provider</h2>
-            <Button onClick={handleSaveConfig}>Save location</Button>
+            <Button onClick={handleSaveConfig} disabled={configSaving}>
+              {configSaving ? 'Saving...' : 'Save location'}
+            </Button>
           </div>
+          {configMessage && (
+            <p className={`text-sm ${configMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
+              {configMessage}
+            </p>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Provider</label>
@@ -1122,7 +1244,12 @@ const Admin = () => {
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={photo.enabled !== false}
-                          onCheckedChange={(value) => handleUpdatePhoto(photo.id, { enabled: value })}
+                          disabled={photoActionId !== null}
+                          onCheckedChange={(value) => handleUpdatePhoto(
+                            photo.id,
+                            { enabled: value },
+                            value ? 'Photo enabled.' : 'Photo hidden from the slideshow.'
+                          )}
                         />
                         <span className="text-sm text-muted-foreground">Enabled</span>
                       </div>
@@ -1130,19 +1257,25 @@ const Admin = () => {
                         <Button
                           variant="secondary"
                           onClick={() => handleReorder(index, 'up')}
-                          disabled={index === 0}
+                          disabled={photoActionId !== null || index === 0}
                         >
                           Move up
                         </Button>
                         <Button
                           variant="secondary"
                           onClick={() => handleReorder(index, 'down')}
-                          disabled={index === sortedPhotos.length - 1}
+                          disabled={photoActionId !== null || index === sortedPhotos.length - 1}
                         >
                           Move down
                         </Button>
                       </div>
-                      <Button variant="destructive" onClick={() => handleDeletePhoto(photo.id)}>Delete</Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => handleDeletePhoto(photo.id)}
+                        disabled={photoActionId !== null}
+                      >
+                        {photoActionId === photo.id ? 'Updating...' : 'Delete'}
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1165,6 +1298,8 @@ const Admin = () => {
     try {
       await onUpload(files);
       setFiles([]);
+    } catch {
+      // The parent action reports the upload error and keeps the selection for retry.
     } finally {
       setUploading(false);
     }
