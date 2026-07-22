@@ -67,7 +67,7 @@ const fetchSettings = async (): Promise<SettingsResponse> => {
   return response.json();
 };
 
-const FlightStage = ({ flight }: { flight: Flight | null }) => {
+const FlightStage = ({ flight, isLingering }: { flight: Flight | null; isLingering: boolean }) => {
   const [layers, setLayers] = useState<FlightLayers>({
     current: flight,
     previous: null,
@@ -113,7 +113,7 @@ const FlightStage = ({ flight }: { flight: Flight | null }) => {
     <div className="relative w-full h-full">
       {layers.previous && (
         <div className="flight-card-layer flight-card-exit" aria-hidden="true">
-          <FlightCard flight={layers.previous} />
+          <FlightCard flight={layers.previous} isLingering={isLingering} />
         </div>
       )}
 
@@ -122,7 +122,7 @@ const FlightStage = ({ flight }: { flight: Flight | null }) => {
           key={`${layers.current.id}-${layers.sequence}`}
           className={`flight-card-layer ${layers.previous ? 'flight-card-enter' : ''}`}
         >
-          <FlightCard flight={layers.current} />
+          <FlightCard flight={layers.current} isLingering={isLingering} />
         </div>
       )}
     </div>
@@ -251,23 +251,32 @@ const FlightDisplay = () => {
         className={`display-layer ${showFlightLayer ? 'display-layer-visible' : 'display-layer-hidden'}`}
         aria-hidden={!showFlightLayer}
       >
-        <FlightStage flight={currentFlight} />
+        <FlightStage flight={currentFlight} isLingering={!hasLiveFlights && showFlightLayer} />
 
         {displayFlights.length > 1 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-30">
-            {displayFlights.map((flight) => (
-              <button
-                key={flight.id}
-                type="button"
-                aria-label={`Show flight ${flight.flightNumber}`}
-                onClick={() => setActiveFlightId(flight.id)}
-                className={`w-2 h-2 rounded-full transition-[width,background-color] duration-300 ${
-                  flight.id === currentFlight?.id
-                    ? 'bg-primary w-8'
-                    : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
-                }`}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 w-44">
+            <div className="flight-rotation-track mb-2" aria-hidden="true">
+              <div
+                key={currentFlight?.id}
+                className="flight-rotation-progress"
+                style={{ animationDuration: `${FLIGHT_ROTATION_MS}ms` }}
               />
-            ))}
+            </div>
+            <div className="flex justify-center gap-2">
+              {displayFlights.map((flight) => (
+                <button
+                  key={flight.id}
+                  type="button"
+                  aria-label={`Show flight ${flight.flightNumber}`}
+                  onClick={() => setActiveFlightId(flight.id)}
+                  className={`w-2 h-2 rounded-full transition-[width,background-color] duration-300 ${
+                    flight.id === currentFlight?.id
+                      ? 'bg-primary w-8'
+                      : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         )}
       </section>
