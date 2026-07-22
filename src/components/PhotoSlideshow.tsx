@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Photo } from '@/types/flight';
 
 interface PhotoSlideshowProps {
@@ -6,13 +6,15 @@ interface PhotoSlideshowProps {
   intervalMs?: number;
   fitMode?: 'cover' | 'contain';
   shuffle?: boolean;
+  paused?: boolean;
 }
 
 const PhotoSlideshow = ({
   photos,
   intervalMs = 10000,
   fitMode = 'cover',
-  shuffle = true
+  shuffle = true,
+  paused = false
 }: PhotoSlideshowProps) => {
   const [activeLayer, setActiveLayer] = useState<'A' | 'B'>('A');
   const [layerAIndex, setLayerAIndex] = useState(0);
@@ -24,23 +26,24 @@ const PhotoSlideshow = ({
   const [drift, setDrift] = useState({ x: 0, y: 0 });
   const swapGuardRef = useRef(false);
   const shuffleQueueRef = useRef<number[]>([]);
+  const photoSignature = photos.map((photo) => `${photo.id}:${photo.src}`).join('|');
 
-  const shuffleIndices = (indices: number[]) => {
+  const shuffleIndices = useCallback((indices: number[]) => {
     const next = [...indices];
     for (let i = next.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
       [next[i], next[j]] = [next[j], next[i]];
     }
     return next;
-  };
+  }, []);
 
-  const refillShuffleQueue = (excludeIndex: number) => {
+  const refillShuffleQueue = useCallback((excludeIndex: number) => {
     const indices = Array.from({ length: photos.length }, (_, index) => index)
       .filter((index) => index !== excludeIndex);
     shuffleQueueRef.current = shuffleIndices(indices);
-  };
+  }, [photos.length, shuffleIndices]);
 
-  const pickNextIndex = (excludeIndex: number) => {
+  const pickNextIndex = useCallback((excludeIndex: number) => {
     if (!shuffle) {
       return (excludeIndex + 1) % photos.length;
     }
@@ -58,7 +61,7 @@ const PhotoSlideshow = ({
       return excludeIndex;
     }
     return next;
-  };
+  }, [photos.length, refillShuffleQueue, shuffle]);
 
   useEffect(() => {
     if (photos.length === 0) return;
@@ -69,7 +72,7 @@ const PhotoSlideshow = ({
     setLayerBIndex(upcoming);
     setHiddenReady(false);
     setIsTransitioning(false);
-  }, [photos]);
+  }, [photoSignature, photos.length, pickNextIndex]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -106,7 +109,7 @@ const PhotoSlideshow = ({
   }, [activeLayer, layerAIndex, layerBIndex, photos]);
 
   useEffect(() => {
-    if (photos.length <= 1) return;
+    if (paused || photos.length <= 1) return;
     if (!hiddenReady || isTransitioning) return;
 
     const timer = setTimeout(() => {
@@ -115,18 +118,15 @@ const PhotoSlideshow = ({
     }, intervalMs);
 
     return () => clearTimeout(timer);
-  }, [photos.length, intervalMs, hiddenReady, isTransitioning, activeLayer, layerAIndex, layerBIndex]);
+  }, [photos.length, intervalMs, hiddenReady, isTransitioning, activeLayer, layerAIndex, layerBIndex, paused]);
 
   if (photos.length === 0) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-muted-foreground text-xl">No photos to display</p>
-      </div>
-    );
+    return <div className="w-full h-full bg-black" aria-hidden="true" />;
   }
 
   const currentIndex = activeLayer === 'A' ? layerAIndex : layerBIndex;
   const hiddenIndex = activeLayer === 'A' ? layerBIndex : layerAIndex;
+  const indicatorIndex = isTransitioning ? hiddenIndex : currentIndex;
   const currentPhoto = photos[currentIndex];
   const upcomingPhoto = photos[hiddenIndex] ?? currentPhoto;
 
@@ -155,7 +155,7 @@ const PhotoSlideshow = ({
     <div className="relative w-full h-full overflow-hidden">
       {/* Current photo */}
       <div
-        className={`absolute inset-0 transition-opacity duration-1200 ease-in-out ${
+        className={`photo-layer absolute inset-0 transition-opacity duration-1000 ease-in-out ${
           activeLayer === 'A'
             ? isTransitioning
               ? 'opacity-0'
@@ -185,7 +185,7 @@ const PhotoSlideshow = ({
       </div>
 
       <div
-        className={`absolute inset-0 transition-opacity duration-1200 ease-in-out ${
+        className={`photo-layer absolute inset-0 transition-opacity duration-1000 ease-in-out ${
           activeLayer === 'B'
             ? isTransitioning
               ? 'opacity-0'
@@ -219,14 +219,15 @@ const PhotoSlideshow = ({
         style={{ transform: `translate(${drift.x}px, ${drift.y}px)` }}
       >
         {photos.map((_, index) => (
-          <div
-            key={index}
-            className={`w-2 h-2 rounded-full transition-all duration-500 ${
-              index === currentIndex
-                ? 'bg-white/80 w-6'
-                : 'bg-white/40'
-            }`}
-          />
+          <div key={index} className="w-6 h-2 flex items-center justify-center">
+            <div
+              className={`h-2 rounded-full transition-[width,background-color] duration-500 ${
+                index === indicatorIndex
+                  ? 'bg-white/80 w-6'
+                  : 'bg-white/40 w-2'
+              }`}
+            />
+          </div>
         ))}
       </div>
 

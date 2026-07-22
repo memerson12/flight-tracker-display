@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
@@ -60,6 +60,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
   }
 
   .font-mono {
@@ -68,12 +69,6 @@
 }
 
 @layer components {
-  .oled-glow {
-    box-shadow: 
-      0 0 60px -20px hsl(var(--aviation-cyan) / 0.4),
-      0 0 100px -30px hsl(var(--aviation-cyan) / 0.2);
-  }
-
   .text-glow-cyan {
     text-shadow: 0 0 30px hsl(var(--aviation-cyan) / 0.6);
   }
@@ -85,7 +80,6 @@
   .card-glass {
     background: var(--gradient-card);
     border: 1px solid hsl(var(--border) / 0.5);
-    backdrop-filter: blur(20px);
   }
 
   .animate-fade-in {
@@ -98,6 +92,62 @@
 
   .animate-pulse-glow {
     animation: pulseGlow 3s ease-in-out infinite;
+  }
+
+  .kiosk-display,
+  .kiosk-display * {
+    cursor: none !important;
+  }
+
+  .display-layer {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    transition: opacity 900ms ease-in-out, visibility 0s linear;
+    will-change: opacity;
+  }
+
+  .display-layer-visible {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+    z-index: 20;
+  }
+
+  .display-layer-hidden {
+    opacity: 0;
+    visibility: hidden;
+    transition-delay: 0s, 900ms;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .flight-card-layer {
+    position: absolute;
+    inset: 0;
+    transform: translateZ(0);
+    will-change: opacity, transform;
+  }
+
+  .flight-card-enter {
+    animation: flightCardEnter 800ms cubic-bezier(0.55, 0, 0.75, 1) both;
+  }
+
+  .flight-card-exit {
+    animation: flightCardExit 800ms cubic-bezier(0.55, 0, 0.75, 1) both;
+  }
+
+  .flight-ambient-glow {
+    width: min(78vw, 900px);
+    height: min(48vh, 480px);
+    animation: ambientPulse 5s ease-in-out infinite;
+    transform: translateZ(0);
+    will-change: opacity, transform;
+  }
+
+  .photo-layer {
+    transform: translateZ(0);
+    will-change: opacity;
   }
 }
 
@@ -130,11 +180,44 @@
 @keyframes pulseGlow {
   0%, 100% { 
     opacity: 0.5;
-    filter: blur(40px);
+    transform: scale(0.98);
   }
   50% { 
     opacity: 0.8;
-    filter: blur(60px);
+    transform: scale(1.02);
+  }
+}
+
+@keyframes ambientPulse {
+  0%, 100% {
+    opacity: 0.62;
+    transform: translateZ(0) scale(0.98);
+  }
+  50% {
+    opacity: 0.88;
+    transform: translateZ(0) scale(1.02);
+  }
+}
+
+@keyframes flightCardEnter {
+  from {
+    opacity: 0.92;
+    transform: translate3d(92%, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes flightCardExit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0.92;
+    transform: translate3d(-92%, 0, 0);
   }
 }
 
@@ -146,4 +229,20 @@
 @keyframes photoFadeOut {
   from { opacity: 1; }
   to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .display-layer,
+  .photo-layer {
+    transition-duration: 150ms;
+  }
+
+  .flight-card-enter,
+  .flight-card-exit {
+    animation-duration: 150ms;
+  }
+
+  .flight-ambient-glow {
+    animation: none;
+  }
 }

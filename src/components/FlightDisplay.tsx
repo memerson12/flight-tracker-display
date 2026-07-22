@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { samplePhotos } from '@/data/sampleFlights';
+import {
+  getNextFlightId,
+  getRemainingLingerMs,
+  mergeFlightSnapshots
+} from '@/lib/flightDisplayState';
 import { Flight, Photo } from '@/types/flight';
 
 import FlightCard from './FlightCard';
 import PhotoSlideshow from './PhotoSlideshow';
-
-type DisplayMode = 'flight' | 'photos';
 
 type FlightResponse = {
   flights: Flight[];
@@ -29,7 +32,16 @@ type SettingsResponse = {
   };
 };
 
-const emptyThreshold = 3;
+type FlightLayers = {
+  current: Flight | null;
+  previous: Flight | null;
+  sequence: number;
+};
+
+const EMPTY_FLIGHTS: Flight[] = [];
+const FLIGHT_ROTATION_MS = 15_000;
+const FLIGHT_LINGER_MS = 45_000;
+const FLIGHT_CROSSFADE_MS = 800;
 
 const fetchFlights = async (): Promise<FlightResponse> => {
   const response = await fetch('/api/flights/overhead');
@@ -55,12 +67,75 @@ const fetchSettings = async (): Promise<SettingsResponse> => {
   return response.json();
 };
 
-const FlightDisplay = () => {
-  const [currentFlight, setCurrentFlight] = useState<Flight | null>(null);
-  const [flightIndex, setFlightIndex] = useState(0);
-  const [emptyStreak, setEmptyStreak] = useState(0);
+const FlightStage = ({ flight }: { flight: Flight | null }) => {
+  const [layers, setLayers] = useState<FlightLayers>({
+    current: flight,
+    previous: null,
+    sequence: 0
+  });
 
-  const { data, isError, dataUpdatedAt } = useQuery({
+  useEffect(() => {
+    if (!flight) return;
+
+    setLayers((previousLayers) => {
+      if (!previousLayers.current) {
+        return { current: flight, previous: null, sequence: previousLayers.sequence };
+      }
+
+      if (previousLayers.current.id === flight.id) {
+        return { ...previousLayers, current: flight };
+      }
+
+      return {
+        current: flight,
+        previous: previousLayers.current,
+        sequence: previousLayers.sequence + 1
+      };
+    });
+  }, [flight]);
+
+  useEffect(() => {
+    if (!layers.previous) return;
+
+    const sequence = layers.sequence;
+    const timer = window.setTimeout(() => {
+      setLayers((previousLayers) => (
+        previousLayers.sequence === sequence
+          ? { ...previousLayers, previous: null }
+          : previousLayers
+      ));
+    }, FLIGHT_CROSSFADE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [layers.previous, layers.sequence]);
+
+  return (
+    <div className="relative w-full h-full">
+      {layers.previous && (
+        <div className="flight-card-layer flight-card-exit" aria-hidden="true">
+          <FlightCard flight={layers.previous} />
+        </div>
+      )}
+
+      {layers.current && (
+        <div
+          key={`${layers.current.id}-${layers.sequence}`}
+          className={`flight-card-layer ${layers.previous ? 'flight-card-enter' : ''}`}
+        >
+          <FlightCard flight={layers.current} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const FlightDisplay = () => {
+  const [displayFlights, setDisplayFlights] = useState<Flight[]>([]);
+  const [activeFlightId, setActiveFlightId] = useState<string | null>(null);
+  const [showFlightLayer, setShowFlightLayer] = useState(false);
+  const emptySinceRef = useRef<number | null>(null);
+
+  const { data, isError } = useQuery({
     queryKey: ['flights'],
     queryFn: fetchFlights,
     refetchInterval: (query) => {
@@ -84,95 +159,119 @@ const FlightDisplay = () => {
     refetchIntervalInBackground: true
   });
 
-  const flights = data?.flights ?? [];
-  const hasFlights = flights.length > 0;
-  const photos: Photo[] = (photoData ?? samplePhotos).map((photo) => ({
-    id: photo.id,
-    src: (photo as PhotoApiItem).url ?? (photo as Photo).src,
-    caption: photo.caption
-  }));
+  const liveFlights = isError ? EMPTY_FLIGHTS : (data?.flights ?? EMPTY_FLIGHTS);
+  const hasLiveFlights = liveFlights.length > 0;
+
+  const photos: Photo[] = useMemo(() => (
+    (photoData ?? samplePhotos).map((photo) => ({
+      id: photo.id,
+      src: (photo as PhotoApiItem).url ?? (photo as Photo).src,
+      caption: photo.caption
+    }))
+  ), [photoData]);
+
+  const flightIds = useMemo(
+    () => displayFlights.map((flight) => flight.id),
+    [displayFlights]
+  );
+  const flightIdSignature = flightIds.join('|');
+  const rotatingFlightIdsRef = useRef(flightIds);
+  rotatingFlightIdsRef.current = flightIds;
+
+  const currentFlight = useMemo(
+    () => displayFlights.find((flight) => flight.id === activeFlightId) ?? displayFlights[0] ?? null,
+    [activeFlightId, displayFlights]
+  );
+
   const slideshowInterval = settingsData?.slideshow?.interval ?? 10000;
   const slideshowShuffle = settingsData?.slideshow?.shuffle ?? true;
   const slideshowFit = settingsData?.slideshow?.fitMode ?? 'cover';
 
   useEffect(() => {
-    if (isError) {
-      setEmptyStreak(emptyThreshold);
+    if (hasLiveFlights) {
+      emptySinceRef.current = null;
+      setDisplayFlights((previous) => mergeFlightSnapshots(previous, liveFlights));
+      setActiveFlightId((previousId) => (
+        previousId && liveFlights.some((flight) => flight.id === previousId)
+          ? previousId
+          : liveFlights[0].id
+      ));
+      setShowFlightLayer(true);
       return;
     }
 
-    setEmptyStreak((prev) => (hasFlights ? 0 : prev + 1));
-  }, [hasFlights, isError, dataUpdatedAt]);
-
-  useEffect(() => {
-    if (!hasFlights) {
-      setCurrentFlight(null);
+    if (displayFlights.length === 0) {
+      emptySinceRef.current = null;
+      setShowFlightLayer(false);
       return;
     }
 
-    const safeIndex = Math.min(flightIndex, flights.length - 1);
-    setFlightIndex(safeIndex);
-    setCurrentFlight(flights[safeIndex]);
-  }, [flights, flightIndex, hasFlights]);
+    if (emptySinceRef.current === null) {
+      emptySinceRef.current = Date.now();
+    }
+
+    const remainingLinger = getRemainingLingerMs(
+      emptySinceRef.current,
+      Date.now(),
+      FLIGHT_LINGER_MS
+    );
+    const lingerTimer = window.setTimeout(() => {
+      setShowFlightLayer(false);
+    }, remainingLinger);
+
+    return () => window.clearTimeout(lingerTimer);
+  }, [displayFlights.length, hasLiveFlights, liveFlights]);
 
   useEffect(() => {
-    if (!hasFlights || flights.length < 2) return;
+    if (!showFlightLayer || rotatingFlightIdsRef.current.length < 2) return;
 
-    const timer = setInterval(() => {
-      setFlightIndex((prev) => {
-        const next = (prev + 1) % flights.length;
-        setCurrentFlight(flights[next]);
-        return next;
-      });
-    }, 15000);
+    const rotationTimer = window.setInterval(() => {
+      setActiveFlightId((currentId) => getNextFlightId(rotatingFlightIdsRef.current, currentId));
+    }, FLIGHT_ROTATION_MS);
 
-    return () => clearInterval(timer);
-  }, [flights, hasFlights]);
-
-  const mode: DisplayMode = hasFlights || emptyStreak < emptyThreshold ? 'flight' : 'photos';
+    return () => window.clearInterval(rotationTimer);
+  }, [flightIdSignature, showFlightLayer]);
 
   return (
-    <div className="w-full h-screen bg-background overflow-hidden relative">
-      {/* Main display */}
-      <div className="w-full h-full">
-        {mode === 'flight' ? (
-          currentFlight ? (
-            <FlightCard flight={currentFlight} key={currentFlight.id} />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-muted-foreground text-lg">
-               Looking for flights overhead...
-            </div>
-          )
-        ) : (
-          <PhotoSlideshow
-            photos={photos}
-            intervalMs={slideshowInterval}
-            shuffle={slideshowShuffle}
-            fitMode={slideshowFit}
-          />
-        )}
-      </div>
+    <main className="kiosk-display w-full h-screen bg-background overflow-hidden relative">
+      <section
+        className={`display-layer ${showFlightLayer ? 'display-layer-hidden' : 'display-layer-visible'}`}
+        aria-hidden={showFlightLayer}
+      >
+        <PhotoSlideshow
+          photos={photos}
+          intervalMs={slideshowInterval}
+          shuffle={slideshowShuffle}
+          fitMode={slideshowFit}
+          paused={showFlightLayer}
+        />
+      </section>
 
-      {/* Flight pagination dots (when in flight mode) */}
-      {mode === 'flight' && flights.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-          {flights.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => {
-                setFlightIndex(index);
-                setCurrentFlight(flights[index]);
-              }}
-              className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                index === flightIndex
-                  ? 'bg-primary w-8'
-                  : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
-              }`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      <section
+        className={`display-layer ${showFlightLayer ? 'display-layer-visible' : 'display-layer-hidden'}`}
+        aria-hidden={!showFlightLayer}
+      >
+        <FlightStage flight={currentFlight} />
+
+        {displayFlights.length > 1 && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-30">
+            {displayFlights.map((flight) => (
+              <button
+                key={flight.id}
+                type="button"
+                aria-label={`Show flight ${flight.flightNumber}`}
+                onClick={() => setActiveFlightId(flight.id)}
+                className={`w-2 h-2 rounded-full transition-[width,background-color] duration-300 ${
+                  flight.id === currentFlight?.id
+                    ? 'bg-primary w-8'
+                    : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                }`}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
   );
 };
 

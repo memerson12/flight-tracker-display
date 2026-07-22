@@ -13,6 +13,10 @@ const FlightCard = ({ flight }: FlightCardProps) => {
   const airline = getAirline(airlineCode);
   const airlineLogo = getLogoUrl(airlineCode);
   const aircraftName = getAircraftName(flight.aircraft.icao || flight.aircraft.type);
+  const logoTileStyle = {
+    backgroundColor: `${airline.color}22`,
+    boxShadow: `0 0 60px -20px ${airline.color}66, 0 0 100px -30px ${airline.color}33`
+  };
 
   const getVerticalIcon = () => {
     if (flight.position.verticalSpeed > 100) return <ArrowUp className="w-5 h-5 text-aviation-green" />;
@@ -30,14 +34,16 @@ const FlightCard = ({ flight }: FlightCardProps) => {
 
   return (
     <div 
-      className="w-full h-full flex flex-col justify-center items-center p-8 animate-fade-in"
+      className="w-full h-full flex flex-col justify-center items-center p-8"
       style={{ '--airline-color': airline.color } as React.CSSProperties}
     >
       {/* Ambient glow effect */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
         <div
-          className="w-[800px] h-[400px] rounded-full blur-[120px] animate-pulse-glow"
-          style={{ backgroundColor: `${airline.color}30` }}
+          className="flight-ambient-glow"
+          style={{
+            background: `radial-gradient(ellipse at center, ${airline.color}2e 0%, ${airline.color}12 42%, transparent 72%)`
+          }}
         />
       </div>
 
@@ -47,8 +53,8 @@ const FlightCard = ({ flight }: FlightCardProps) => {
           <div className="flex items-center gap-6">
             {airlineLogo ? (
               <div
-                className="w-24 h-24 rounded-2xl backdrop-blur-sm flex items-center justify-center p-4 oled-glow"
-                style={{ backgroundColor: `${airline.color}22` }}
+                className="w-24 h-24 rounded-2xl flex items-center justify-center p-4"
+                style={logoTileStyle}
               >
                 <img
                   src={airlineLogo}
@@ -61,8 +67,8 @@ const FlightCard = ({ flight }: FlightCardProps) => {
               </div>
             ) : (
               <div
-                className="w-24 h-24 rounded-2xl flex items-center justify-center oled-glow"
-                style={{ backgroundColor: `${airline.color}22` }}
+                className="w-24 h-24 rounded-2xl flex items-center justify-center"
+                style={logoTileStyle}
               >
                 <Plane className="w-12 h-12" style={{ color: airline.color }} />
               </div>

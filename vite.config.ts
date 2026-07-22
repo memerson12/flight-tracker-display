@@ -15,6 +15,15 @@ export default defineConfig(({ mode }) => ({
       "/photos": "http://localhost:8000",
     },
   },
+  preview: {
+    host: "::",
+    port: 8080,
+    strictPort: true,
+    proxy: {
+      "/api": "http://localhost:8000",
+      "/photos": "http://localhost:8000",
+    },
+  },
   plugins: [react()],
   resolve: {
     alias: {
