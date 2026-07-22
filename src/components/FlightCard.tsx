@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { ArrowDown, ArrowRight, ArrowUp, Gauge, Minus, Mountain, Plane } from 'lucide-react';
 
-import { getAircraftName, getAirline, getLogoUrl, extractAirlineCode } from '@/lib/airlines';
+import { getAircraftName, getAirline, getLogoUrl, resolveAirlineCode } from '@/lib/airlines';
 import { getDisplayAccent } from '@/lib/displayColor';
 import { Flight } from '@/types/flight';
 
@@ -45,8 +45,12 @@ const MetricCard = ({ accent, icon, label, value, unit }: MetricCardProps) => (
 );
 
 const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
-  const rawAirlineCode = flight.airline.iata || extractAirlineCode(flight.flightNumber);
-  const airlineCode = rawAirlineCode.length === 2 ? rawAirlineCode : extractAirlineCode(flight.flightNumber);
+  const airlineCode = resolveAirlineCode(
+    flight.airline.icao,
+    flight.airline.iata,
+    flight.flightNumber,
+    flight.callsign
+  );
   const airline = getAirline(airlineCode);
   const accent = getDisplayAccent(airline.color);
   const airlineLogo = getLogoUrl(airlineCode);

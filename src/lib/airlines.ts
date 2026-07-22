@@ -3,6 +3,7 @@ export type AirlineInfo = {
   color: string;
   region: string;
   alliance: string | null;
+  logoCode?: string;
 };
 
 const logoBaseUrl = 'https://www.gstatic.com/flights/airline_logos/70px/';
@@ -48,6 +49,9 @@ const airlines: Record<string, AirlineInfo> = {
   MS: { name: 'EgyptAir', color: '#002654', region: 'Middle East', alliance: 'Star Alliance' },
 
   QF: { name: 'Qantas', color: '#E30613', region: 'Oceania', alliance: 'oneworld' },
+  QLK: { name: 'QantasLink', color: '#E30613', region: 'Oceania', alliance: 'oneworld', logoCode: 'QF' },
+  QJE: { name: 'QantasLink', color: '#E30613', region: 'Oceania', alliance: 'oneworld', logoCode: 'QF' },
+  NWK: { name: 'QantasLink', color: '#E30613', region: 'Oceania', alliance: 'oneworld', logoCode: 'QF' },
   JQ: { name: 'Jetstar Airways', color: '#FF6600', region: 'Oceania', alliance: null },
   VA: { name: 'Virgin Australia', color: '#E40520', region: 'Oceania', alliance: null },
   NZ: { name: 'Air New Zealand', color: '#003F7F', region: 'Oceania', alliance: 'Star Alliance' },
@@ -316,8 +320,22 @@ const aircraftTypes: Record<string, string> = {
 
 export const extractAirlineCode = (flightNumber: string) => {
   if (!flightNumber) return '';
-  const match = flightNumber.match(/^([A-Z0-9]{2})/i);
-  return match ? match[1].toUpperCase() : '';
+  const normalized = flightNumber.trim().toUpperCase();
+  const threeLetterMatch = normalized.match(/^([A-Z]{3})/);
+  if (threeLetterMatch && airlines[threeLetterMatch[1]]) {
+    return threeLetterMatch[1];
+  }
+
+  const match = normalized.match(/^([A-Z0-9]{2})/);
+  return match ? match[1] : '';
+};
+
+export const resolveAirlineCode = (...identifiers: Array<string | undefined>) => {
+  for (const identifier of identifiers) {
+    const code = extractAirlineCode(identifier || '');
+    if (code) return code;
+  }
+  return '';
 };
 
 export const getAirline = (code?: string): AirlineInfo => {
@@ -336,7 +354,9 @@ export const getAirline = (code?: string): AirlineInfo => {
 
 export const getLogoUrl = (code?: string) => {
   if (!code) return null;
-  return `${logoBaseUrl}${code.toUpperCase()}.png`;
+  const normalized = code.toUpperCase();
+  const logoCode = airlines[normalized]?.logoCode || normalized;
+  return `${logoBaseUrl}${logoCode}.png`;
 };
 
 export const getAircraftName = (code?: string) => {
