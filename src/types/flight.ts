@@ -3,9 +3,11 @@ export interface Flight {
   flightNumber: string;
   callsign: string;
   airline: {
+    displayCode?: string;
     name: string;
     iata: string;
     icao: string;
+    resolutionSource?: string;
     logo?: string;
   };
   aircraft: {

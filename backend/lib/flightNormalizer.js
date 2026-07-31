@@ -1,6 +1,8 @@
 const FEET_PER_METER = 3.28084;
 const KNOTS_PER_MPS = 1.94384;
 const FPM_PER_MPS = 196.8504;
+const { resolveAirlineIdentity } = require('./airlineIdentity');
+const unknownAirlineWarnings = new Set();
 
 function toNumber(value, fallback = 0) {
   const num = Number(value);
@@ -17,19 +19,6 @@ function mpsToKnots(value) {
 
 function mpsToFpm(value) {
   return Math.round(toNumber(value) * FPM_PER_MPS);
-}
-
-function normalizeAirline(code) {
-  const trimmed = String(code || '').trim();
-  if (!trimmed) {
-    return { name: 'Unknown Airline', iata: '', icao: '' };
-  }
-
-  return {
-    name: trimmed,
-    iata: trimmed,
-    icao: trimmed
-  };
 }
 
 function normalizeAirport(code) {
@@ -66,7 +55,26 @@ function normalizeFlight(rawFlight) {
   const verticalFpm = mpsToFpm(rawFlight.verticalRate);
   const heading = Math.round(toNumber(rawFlight.heading, 0));
 
-  const airline = normalizeAirline(rawFlight.airline);
+  const airline = resolveAirlineIdentity({
+    operatorIcao: rawFlight.operatorIcao,
+    marketingIata: rawFlight.marketingIata,
+    flightNumber: rawFlight.flightNumber,
+    callsign: rawFlight.callsign,
+    airline: rawFlight.airline
+  });
+  if (airline.resolutionSource === 'unknown' && (airline.icao || airline.iata)) {
+    const signature = `${airline.icao}|${airline.iata}`;
+    if (!unknownAirlineWarnings.has(signature)) {
+      if (unknownAirlineWarnings.size >= 100) unknownAirlineWarnings.clear();
+      unknownAirlineWarnings.add(signature);
+      console.warn('Unresolved airline identity', {
+        operatorIcao: airline.icao,
+        marketingIata: airline.iata,
+        flightNumber: rawFlight.flightNumber || '',
+        callsign: rawFlight.callsign || ''
+      });
+    }
+  }
   const departure = normalizeAirport(rawFlight.origin);
   const arrival = normalizeAirport(rawFlight.destination);
 
@@ -113,5 +121,6 @@ function normalizeFlightData(data) {
 }
 
 module.exports = {
+  normalizeFlight,
   normalizeFlightData
 };

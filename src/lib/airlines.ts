@@ -1,3 +1,5 @@
+import airlineRegistry from '@/data/airlineRegistry.json';
+
 export type AirlineInfo = {
   name: string;
   color: string;
@@ -6,95 +8,28 @@ export type AirlineInfo = {
   logoCode?: string;
 };
 
+type AirlineRegistryRecord = AirlineInfo & {
+  key: string;
+  iata: string;
+  icao: string[];
+  preferOperatorBrand?: boolean;
+};
+
 const logoBaseUrl = 'https://www.gstatic.com/flights/airline_logos/70px/';
+const registry = airlineRegistry as AirlineRegistryRecord[];
+const registryRecordsByKey: Record<string, AirlineRegistryRecord> = Object.fromEntries(
+  registry.map((record) => [record.key, record])
+);
+const airlines: Record<string, AirlineInfo> = Object.fromEntries(
+  registry.map((record) => [record.key, record])
+);
+const airlineCodeAliases: Record<string, string> = {};
 
-// Live flight feeds commonly identify operators by their three-letter ICAO code,
-// while airline branding and logo services use the two-character IATA code.
-const airlineCodeAliases: Record<string, string> = {
-  AAL: 'AA',
-  AAY: 'G4',
-  ACA: 'AC',
-  ASA: 'AS',
-  DAL: 'DL',
-  FDX: 'FX',
-  FFT: 'F9',
-  JBU: 'B6',
-  NKS: 'NK',
-  SWA: 'WN',
-  UAL: 'UA',
-  UPS: '5X',
-  WJA: 'WS'
-};
-
-const airlines: Record<string, AirlineInfo> = {
-  AA: { name: 'American Airlines', color: '#C73530', region: 'North America', alliance: 'oneworld' },
-  UA: { name: 'United Airlines', color: '#0033A1', region: 'North America', alliance: 'Star Alliance' },
-  DL: { name: 'Delta Air Lines', color: '#D2343E', region: 'North America', alliance: 'SkyTeam' },
-  WN: { name: 'Southwest Airlines', color: '#304CB2', region: 'North America', alliance: null },
-  B6: { name: 'JetBlue Airways', color: '#0F4C96', region: 'North America', alliance: null },
-  AS: { name: 'Alaska Airlines', color: '#00467F', region: 'North America', alliance: null },
-  F9: { name: 'Frontier Airlines', color: '#00843D', region: 'North America', alliance: null },
-  NK: { name: 'Spirit Airlines', color: '#FFD100', region: 'North America', alliance: null },
-  G4: { name: 'Allegiant Air', color: '#003F7F', region: 'North America', alliance: null },
-
-  BA: { name: 'British Airways', color: '#075AAA', region: 'Europe', alliance: 'oneworld' },
-  LH: { name: 'Lufthansa', color: '#FFD700', region: 'Europe', alliance: 'Star Alliance' },
-  AF: { name: 'Air France', color: '#002157', region: 'Europe', alliance: 'SkyTeam' },
-  KL: { name: 'KLM', color: '#006DB7', region: 'Europe', alliance: 'SkyTeam' },
-  LX: { name: 'Swiss International Air Lines', color: '#E30613', region: 'Europe', alliance: 'Star Alliance' },
-  OS: { name: 'Austrian Airlines', color: '#E40520', region: 'Europe', alliance: 'Star Alliance' },
-  SN: { name: 'Brussels Airlines', color: '#3E5AA0', region: 'Europe', alliance: 'Star Alliance' },
-  FR: { name: 'Ryanair', color: '#073590', region: 'Europe', alliance: null },
-  U2: { name: 'easyJet', color: '#FF6600', region: 'Europe', alliance: null },
-  VY: { name: 'Vueling', color: '#FFD100', region: 'Europe', alliance: null },
-
-  SQ: { name: 'Singapore Airlines', color: '#fcb130', region: 'Asia', alliance: 'Star Alliance' },
-  CX: { name: 'Cathay Pacific', color: '#007367', region: 'Asia', alliance: 'oneworld' },
-  JL: { name: 'Japan Airlines', color: '#DC143C', region: 'Asia', alliance: 'oneworld' },
-  NH: { name: 'All Nippon Airways', color: '#1E4294', region: 'Asia', alliance: 'Star Alliance' },
-  TG: { name: 'Thai Airways', color: '#7B3F98', region: 'Asia', alliance: 'Star Alliance' },
-  KE: { name: 'Korean Air', color: '#0047AB', region: 'Asia', alliance: 'SkyTeam' },
-  OZ: { name: 'Asiana Airlines', color: '#E30613', region: 'Asia', alliance: 'Star Alliance' },
-  AK: { name: 'Air Asia', color: '#dc2425', region: 'Asia', alliance: null },
-  MH: { name: 'Malaysia Airlines', color: '#001E62', region: 'Asia', alliance: 'oneworld' },
-  CA: { name: 'Air China', color: '#E30613', region: 'Asia', alliance: 'Star Alliance' },
-  CZ: { name: 'China Southern Airlines', color: '#0057B8', region: 'Asia', alliance: 'SkyTeam' },
-
-  EK: { name: 'Emirates', color: '#C8242F', region: 'Middle East', alliance: null },
-  QR: { name: 'Qatar Airways', color: '#5C0633', region: 'Middle East', alliance: 'oneworld' },
-  EY: { name: 'Etihad Airways', color: '#BE9B3B', region: 'Middle East', alliance: null },
-  TK: { name: 'Turkish Airlines', color: '#C70025', region: 'Middle East', alliance: 'Star Alliance' },
-  MS: { name: 'EgyptAir', color: '#002654', region: 'Middle East', alliance: 'Star Alliance' },
-
-  QF: { name: 'Qantas', color: '#E30613', region: 'Oceania', alliance: 'oneworld' },
-  QLK: { name: 'QantasLink', color: '#E30613', region: 'Oceania', alliance: 'oneworld', logoCode: 'QF' },
-  QJE: { name: 'QantasLink', color: '#E30613', region: 'Oceania', alliance: 'oneworld', logoCode: 'QF' },
-  NWK: { name: 'QantasLink', color: '#E30613', region: 'Oceania', alliance: 'oneworld', logoCode: 'QF' },
-  JQ: { name: 'Jetstar Airways', color: '#FF6600', region: 'Oceania', alliance: null },
-  VA: { name: 'Virgin Australia', color: '#E40520', region: 'Oceania', alliance: null },
-  NZ: { name: 'Air New Zealand', color: '#003F7F', region: 'Oceania', alliance: 'Star Alliance' },
-  QQ: { name: 'Alliance Airlines', color: '#F6C94C', region: 'Oceania', alliance: null },
-
-  SA: { name: 'South African Airways', color: '#006DB7', region: 'Africa', alliance: 'Star Alliance' },
-  ET: { name: 'Ethiopian Airlines', color: '#00A651', region: 'Africa', alliance: 'Star Alliance' },
-
-  AC: { name: 'Air Canada', color: '#FF0000', region: 'North America', alliance: 'Star Alliance' },
-  WS: { name: 'WestJet', color: '#003F7F', region: 'North America', alliance: null },
-  PD: { name: 'Porter Airlines', color: '#00457C', region: 'North America', alliance: null },
-
-  LA: { name: 'LATAM Airlines', color: '#E30613', region: 'South America', alliance: 'oneworld' },
-  AV: { name: 'Avianca', color: '#E30613', region: 'South America', alliance: 'Star Alliance' },
-  AM: { name: 'Aeromexico', color: '#00447C', region: 'North America', alliance: 'SkyTeam' },
-  CM: { name: 'Copa Airlines', color: '#003F7F', region: 'Central America', alliance: 'Star Alliance' },
-
-  WF: { name: 'Wideroe', color: '#E30613', region: 'Europe', alliance: null },
-  '6E': { name: 'IndiGo', color: '#003F7F', region: 'Asia', alliance: null },
-  AI: { name: 'Air India', color: '#E30613', region: 'Asia', alliance: 'Star Alliance' },
-  IX: { name: 'Air India Express', color: '#E30613', region: 'Asia', alliance: null },
-
-  FX: { name: 'FedEx Express', color: '#4B0082', region: 'North America', alliance: null },
-  '5X': { name: 'UPS Airlines', color: '#654321', region: 'North America', alliance: null }
-};
+registry.forEach((record) => {
+  record.icao.forEach((icao) => {
+    airlineCodeAliases[icao] = record.key;
+  });
+});
 
 const aircraftTypes: Record<string, string> = {
   A124: 'Antonov An-124 Ruslan',
@@ -339,15 +274,16 @@ const aircraftTypes: Record<string, string> = {
 export const extractAirlineCode = (flightNumber: string) => {
   if (!flightNumber) return '';
   const normalized = flightNumber.trim().toUpperCase();
-  const threeLetterMatch = normalized.match(/^([A-Z]{3})/);
+  const threeLetterMatch = normalized.match(/^([A-Z]{3})(?=[A-Z0-9]|$)/);
   if (threeLetterMatch) {
     const threeLetterCode = threeLetterMatch[1];
     if (airlines[threeLetterCode]) return threeLetterCode;
     if (airlineCodeAliases[threeLetterCode]) return airlineCodeAliases[threeLetterCode];
   }
 
-  const match = normalized.match(/^([A-Z0-9]{2})/);
-  return match ? match[1] : '';
+  const twoCharacterMatch = normalized.match(/^([A-Z0-9]{2})(?=\d|$)/);
+  const twoCharacterCode = twoCharacterMatch?.[1] || '';
+  return airlines[twoCharacterCode] ? twoCharacterCode : '';
 };
 
 export const resolveAirlineCode = (...identifiers: Array<string | undefined>) => {
@@ -358,6 +294,28 @@ export const resolveAirlineCode = (...identifiers: Array<string | undefined>) =>
   return '';
 };
 
+export const resolveFlightAirlineCode = ({
+  displayCode,
+  icao,
+  iata,
+  flightNumber,
+  callsign
+}: {
+  displayCode?: string;
+  icao?: string;
+  iata?: string;
+  flightNumber?: string;
+  callsign?: string;
+}) => {
+  const providedDisplayCode = extractAirlineCode(displayCode || '');
+  if (providedDisplayCode) return providedDisplayCode;
+
+  const operatorCode = resolveAirlineCode(icao, callsign);
+  if (operatorCode && registryRecordsByKey[operatorCode]?.preferOperatorBrand) return operatorCode;
+
+  return resolveAirlineCode(flightNumber, iata, operatorCode);
+};
+
 export const getAirline = (code?: string): AirlineInfo => {
   if (!code) {
     return { name: 'Unknown Airline', color: '#666666', region: 'Unknown', alliance: null };
@@ -366,7 +324,7 @@ export const getAirline = (code?: string): AirlineInfo => {
   const normalizedCode = code.toUpperCase();
   const normalized = airlineCodeAliases[normalizedCode] || normalizedCode;
   return airlines[normalized] || {
-    name: `${normalized} Airlines`,
+    name: 'Unknown Airline',
     color: '#666666',
     region: 'Unknown',
     alliance: null
@@ -377,6 +335,7 @@ export const getLogoUrl = (code?: string) => {
   if (!code) return null;
   const normalizedCode = code.toUpperCase();
   const normalized = airlineCodeAliases[normalizedCode] || normalizedCode;
+  if (!airlines[normalized]) return null;
   const logoCode = airlines[normalized]?.logoCode || normalized;
   return `${logoBaseUrl}${logoCode}.png`;
 };

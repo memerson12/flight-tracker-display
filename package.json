@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "pnpm test:frontend && pnpm test:backend",
+    "test:frontend": "vitest run",
+    "test:backend": "pnpm --dir backend run test",
     "test:watch": "vitest"
   },
   "dependencies": {

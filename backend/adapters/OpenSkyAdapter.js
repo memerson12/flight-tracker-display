@@ -271,8 +271,9 @@ class OpenSkyAdapter extends FlightAdapter {
                 id: this.generateFlightId(icao24, callsign),
                 icao24: icao24 || '',
                 callsign: callsign?.trim() || '',
-                flightNumber: parsedCallsign.flightNumber || '',
-                airline: parsedCallsign.airline || '',
+                flightNumber: '',
+                operatorIcao: parsedCallsign.operatorIcao,
+                marketingIata: '',
                 aircraft: '', // Not available in OpenSky states
                 registration: '', // Not available in OpenSky states
                 origin: '', // Not available in OpenSky states
@@ -299,20 +300,18 @@ class OpenSkyAdapter extends FlightAdapter {
      * @returns {Object} Parsed callsign info
      */
     parseCallsign(callsign) {
-        if (!callsign) return { airline: '', flightNumber: '' };
+        if (!callsign) return { operatorIcao: '' };
         
         const trimmed = callsign.trim();
         
-        // Try to extract airline code (usually first 2-3 letters)
-        const match = trimmed.match(/^([A-Z]{2,3})(\d+.*)?$/);
+        const match = trimmed.toUpperCase().match(/^([A-Z]{3})(?=[A-Z0-9])/);
         if (match) {
             return {
-                airline: match[1],
-                flightNumber: match[2] || ''
+                operatorIcao: match[1]
             };
         }
-        
-        return { airline: '', flightNumber: trimmed };
+
+        return { operatorIcao: '' };
     }
 
     /**

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plane } from 'lucide-react';
 
-import { getAirline, resolveAirlineCode } from '@/lib/airlines';
+import { getAirline, resolveFlightAirlineCode } from '@/lib/airlines';
 import { getDisplayAccent } from '@/lib/displayColor';
 import {
   calculateBearing,
@@ -50,12 +50,13 @@ const WindowPositionRail = ({ flight, settings }: WindowPositionRailProps) => {
   const position = mapBearingToWindow(bearing, centerBearing, viewAngle);
   const minimumBearing = normalizeBearing(centerBearing - viewAngle / 2);
   const maximumBearing = normalizeBearing(centerBearing + viewAngle / 2);
-  const airlineCode = resolveAirlineCode(
-    flight.airline.icao,
-    flight.airline.iata,
-    flight.flightNumber,
-    flight.callsign
-  );
+  const airlineCode = resolveFlightAirlineCode({
+    displayCode: flight.airline.displayCode,
+    icao: flight.airline.icao,
+    iata: flight.airline.iata,
+    flightNumber: flight.flightNumber,
+    callsign: flight.callsign
+  });
   const accent = getDisplayAccent(getAirline(airlineCode).color);
   const markerTransform = position.percent <= 4
     ? 'translateX(0)'

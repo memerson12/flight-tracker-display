@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { extractAirlineCode, getAirline, getLogoUrl, resolveAirlineCode } from './airlines';
+import {
+  extractAirlineCode,
+  getAirline,
+  getLogoUrl,
+  resolveAirlineCode,
+  resolveFlightAirlineCode
+} from './airlines';
 
 describe('QantasLink airline mapping', () => {
   it('recognizes a QantasLink ICAO callsign without truncating it', () => {
@@ -55,5 +61,35 @@ describe('ICAO airline code mapping', () => {
   it('canonicalizes a raw ICAO code passed directly to airline and logo lookup', () => {
     expect(getAirline('DAL').name).toBe('Delta Air Lines');
     expect(getLogoUrl('SWA')).toBe('https://www.gstatic.com/flights/airline_logos/70px/WN.png');
+  });
+
+  it('uses the marketing carrier for a regional codeshare while preserving operator-brand overrides', () => {
+    expect(resolveFlightAirlineCode({
+      icao: 'SKW',
+      iata: 'DL',
+      flightNumber: 'DL3857',
+      callsign: 'SKW3857'
+    })).toBe('DL');
+    expect(resolveFlightAirlineCode({
+      icao: 'QLK',
+      iata: 'QF',
+      flightNumber: 'QF829',
+      callsign: 'QLK829D'
+    })).toBe('QLK');
+  });
+
+  it('does not truncate an unknown ICAO operator into a fake airline', () => {
+    expect(extractAirlineCode('XYZ123')).toBe('');
+    expect(resolveAirlineCode('XYZ', 'XYZ123')).toBe('');
+    expect(getAirline('XYZ').name).toBe('Unknown Airline');
+    expect(getLogoUrl('XYZ')).toBeNull();
+  });
+
+  it.each([
+    ['UAE123', 'EK'],
+    ['DLH456', 'LH'],
+    ['QTR789', 'QR']
+  ])('does not confuse %s with its two-letter prefix', (identifier, expectedCode) => {
+    expect(extractAirlineCode(identifier)).toBe(expectedCode);
   });
 });

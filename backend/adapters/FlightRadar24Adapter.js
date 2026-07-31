@@ -159,12 +159,17 @@ class FlightRadar24Adapter extends FlightAdapter {
                 flight_number, on_ground, vertical_rate, callsign
             ] = data;
 
+            const resolvedCallsign = callsign || flight_number || '';
+            const operatorIcao = this.extractOperatorIcao(resolvedCallsign);
+            const marketingIata = this.extractMarketingIata(flight_number || '');
+
             return {
                 id: id,
                 icao24: icao24 || '',
-                callsign: callsign || flight_number || '',
+                callsign: resolvedCallsign,
                 flightNumber: flight_number || '',
-                airline: this.extractAirline(callsign || flight_number || ''),
+                operatorIcao,
+                marketingIata,
                 aircraft: aircraft_type || '',
                 registration: registration || '',
                 origin: origin || '',
@@ -186,15 +191,24 @@ class FlightRadar24Adapter extends FlightAdapter {
     }
 
     /**
-     * Extract airline from callsign/flight number
-     * @param {string} callsign - Flight callsign or number
-     * @returns {string} Airline code or name
+     * Extract the operating carrier's ICAO code from a radio callsign.
      */
-    extractAirline(callsign) {
+    extractOperatorIcao(callsign) {
         if (!callsign) return '';
-        
-        // Extract airline code (usually first 2-3 characters)
-        const match = callsign.match(/^([A-Z]{2,3})/);
+
+        const match = String(callsign).trim().toUpperCase().match(/^([A-Z]{3})(?=[A-Z0-9])/);
+        return match ? match[1] : '';
+    }
+
+    /**
+     * Extract the marketing carrier's IATA code from a commercial flight number.
+     */
+    extractMarketingIata(flightNumber) {
+        if (!flightNumber) return '';
+
+        const normalized = String(flightNumber).trim().toUpperCase();
+        if (/^N\d{1,5}[A-Z]{0,2}$/.test(normalized)) return '';
+        const match = normalized.match(/^([A-Z0-9]{2})(?=\d)/);
         return match ? match[1] : '';
     }
 

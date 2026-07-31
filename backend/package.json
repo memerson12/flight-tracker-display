@@ -4,7 +4,7 @@
   "description": "A real-time flight tracking display optimized for OLED TVs that shows flights currently overhead based on your location. The display automatically goes pure black when no flights are detected to save power and prevent burn-in.",
   "main": "app.js",
   "scripts": {
-    "test": "mocha --recursive test || true",
+    "test": "mocha --recursive test",
     "start": "node server.js"
   },
   "keywords": [],
