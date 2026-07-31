@@ -8,6 +8,24 @@ export type AirlineInfo = {
 
 const logoBaseUrl = 'https://www.gstatic.com/flights/airline_logos/70px/';
 
+// Live flight feeds commonly identify operators by their three-letter ICAO code,
+// while airline branding and logo services use the two-character IATA code.
+const airlineCodeAliases: Record<string, string> = {
+  AAL: 'AA',
+  AAY: 'G4',
+  ACA: 'AC',
+  ASA: 'AS',
+  DAL: 'DL',
+  FDX: 'FX',
+  FFT: 'F9',
+  JBU: 'B6',
+  NKS: 'NK',
+  SWA: 'WN',
+  UAL: 'UA',
+  UPS: '5X',
+  WJA: 'WS'
+};
+
 const airlines: Record<string, AirlineInfo> = {
   AA: { name: 'American Airlines', color: '#C73530', region: 'North America', alliance: 'oneworld' },
   UA: { name: 'United Airlines', color: '#0033A1', region: 'North America', alliance: 'Star Alliance' },
@@ -322,8 +340,10 @@ export const extractAirlineCode = (flightNumber: string) => {
   if (!flightNumber) return '';
   const normalized = flightNumber.trim().toUpperCase();
   const threeLetterMatch = normalized.match(/^([A-Z]{3})/);
-  if (threeLetterMatch && airlines[threeLetterMatch[1]]) {
-    return threeLetterMatch[1];
+  if (threeLetterMatch) {
+    const threeLetterCode = threeLetterMatch[1];
+    if (airlines[threeLetterCode]) return threeLetterCode;
+    if (airlineCodeAliases[threeLetterCode]) return airlineCodeAliases[threeLetterCode];
   }
 
   const match = normalized.match(/^([A-Z0-9]{2})/);
@@ -343,7 +363,8 @@ export const getAirline = (code?: string): AirlineInfo => {
     return { name: 'Unknown Airline', color: '#666666', region: 'Unknown', alliance: null };
   }
 
-  const normalized = code.toUpperCase();
+  const normalizedCode = code.toUpperCase();
+  const normalized = airlineCodeAliases[normalizedCode] || normalizedCode;
   return airlines[normalized] || {
     name: `${normalized} Airlines`,
     color: '#666666',
@@ -354,7 +375,8 @@ export const getAirline = (code?: string): AirlineInfo => {
 
 export const getLogoUrl = (code?: string) => {
   if (!code) return null;
-  const normalized = code.toUpperCase();
+  const normalizedCode = code.toUpperCase();
+  const normalized = airlineCodeAliases[normalizedCode] || normalizedCode;
   const logoCode = airlines[normalized]?.logoCode || normalized;
   return `${logoBaseUrl}${logoCode}.png`;
 };
