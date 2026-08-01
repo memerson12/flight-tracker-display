@@ -204,7 +204,7 @@ const PhotoSlideshow = ({
   }`;
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-black">
+    <div className="relative isolate w-full h-full overflow-hidden bg-black">
       <PhotoLayer
         photo={photos[layerAIndex]}
         fitMode={fitMode}
@@ -224,7 +224,7 @@ const PhotoSlideshow = ({
       />
 
       <div
-        className={`absolute top-8 ${clockCorner === 'right' ? 'right-8' : 'left-8'} transition-all duration-700`}
+        className={`absolute top-8 ${clockCorner === 'right' ? 'right-8' : 'left-8'} mix-blend-difference transition-all duration-700`}
         style={{ transform: `translate(${drift.x}px, ${drift.y}px)` }}
       >
         <Clock align={clockCorner} settings={clock} />
@@ -242,11 +242,11 @@ const Clock = ({ align, settings }: { align: Corner; settings: ClockSettings }) 
   }, []);
 
   return (
-    <div className={align === 'right' ? 'text-right' : 'text-left'}>
-      <div className="font-mono text-5xl font-light text-white/80 tracking-wider uppercase">
+    <div className={`${align === 'right' ? 'text-right' : 'text-left'} text-white select-none`}>
+      <div className="font-mono text-5xl font-light tracking-wider uppercase">
         {formatClockTime(time, settings)}
       </div>
-      <div className="text-lg text-white/50 mt-1">
+      <div className="text-lg text-white/70 mt-1">
         {formatClockDate(time, settings)}
       </div>
     </div>
