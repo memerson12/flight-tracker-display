@@ -1367,8 +1367,8 @@ const Admin = () => {
           </div>
         </section>
 
-        <section className="card-glass rounded-3xl p-8 space-y-6">
-          <div className="flex items-center justify-between">
+        <section className="card-glass rounded-3xl p-4 sm:p-6 lg:p-8 space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-semibold">Photo Library</h2>
             <PhotoUpload onUpload={handleUpload} />
           </div>
@@ -1378,15 +1378,15 @@ const Admin = () => {
               <p className="text-muted-foreground">No photos uploaded yet.</p>
             ) : (
               sortedPhotos.map((photo, index) => (
-                <div key={photo.id} className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-border/60">
-                  <div className="w-full md:w-40 h-28 bg-black/40 rounded-xl overflow-hidden">
+                <div key={photo.id} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-border/60 p-4 md:flex-row">
+                  <div className="h-28 w-full shrink-0 overflow-hidden rounded-xl bg-black/40 md:w-40">
                     <img src={photo.thumb || photo.url} alt={photo.location || 'Photo'} className="w-full h-full object-cover" />
                   </div>
-                  <div className="flex-1 space-y-3">
+                  <div className="min-w-0 flex-1 space-y-3">
                     {photo.location && (
-                      <p className="text-sm text-muted-foreground">Location: {photo.location}</p>
+                      <p className="break-words text-sm text-muted-foreground">Location: {photo.location}</p>
                     )}
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={photo.enabled !== false}
@@ -1399,9 +1399,10 @@ const Admin = () => {
                         />
                         <span className="text-sm text-muted-foreground">Enabled</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
                         <Button
                           variant="secondary"
+                          className="w-full"
                           onClick={() => handleReorder(index, 'up')}
                           disabled={photoActionId !== null || index === 0}
                         >
@@ -1409,6 +1410,7 @@ const Admin = () => {
                         </Button>
                         <Button
                           variant="secondary"
+                          className="w-full"
                           onClick={() => handleReorder(index, 'down')}
                           disabled={photoActionId !== null || index === sortedPhotos.length - 1}
                         >
@@ -1417,6 +1419,7 @@ const Admin = () => {
                       </div>
                       <Button
                         variant="destructive"
+                        className="w-full sm:ml-auto sm:w-auto"
                         onClick={() => handleDeletePhoto(photo.id)}
                         disabled={photoActionId !== null}
                       >
@@ -1452,14 +1455,19 @@ const Admin = () => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-3 md:items-center">
+    <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
       <Input
         type="file"
         accept="image/*"
         multiple
         onChange={(event) => setFiles(Array.from(event.target.files || []))}
+        className="min-w-0 w-full sm:w-72"
       />
-      <Button onClick={handleSubmit} disabled={files.length === 0 || uploading}>
+      <Button
+        className="w-full whitespace-nowrap sm:w-auto"
+        onClick={handleSubmit}
+        disabled={files.length === 0 || uploading}
+      >
         {uploading ? 'Uploading...' : 'Upload photos'}
       </Button>
     </div>
