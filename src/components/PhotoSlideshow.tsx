@@ -251,8 +251,9 @@ const Clock = ({
 
   const clockTime = formatClockTime(time, settings).toUpperCase();
   const clockDate = formatClockDate(time, settings);
+  const maskPadding = 16;
   const textAnchor = align === 'right' ? 'end' : 'start';
-  const textX = align === 'right' ? 260 : 0;
+  const textX = align === 'right' ? 260 + maskPadding : maskPadding;
 
   return (
     <>
@@ -261,7 +262,7 @@ const Clock = ({
           <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
             <text
               x={textX}
-              y="46"
+              y={46 + maskPadding}
               textAnchor={textAnchor}
               fontFamily="JetBrains Mono, monospace"
               fontSize="48"
@@ -272,7 +273,7 @@ const Clock = ({
             </text>
             <text
               x={textX}
-              y="75"
+              y={75 + maskPadding}
               textAnchor={textAnchor}
               fontFamily="Inter, system-ui, sans-serif"
               fontSize="18"
@@ -284,17 +285,20 @@ const Clock = ({
         </defs>
       </svg>
       <div
-        className="h-[82px] w-[260px] select-none bg-white transition-transform duration-700"
+        className="relative h-[82px] w-[260px] select-none"
         role="timer"
         aria-label={`${clockTime}, ${clockDate}`}
-        style={{
-          clipPath: `url(#${clipId})`,
-          mixBlendMode: 'difference',
-          backdropFilter: 'grayscale(1) contrast(100)',
-          WebkitBackdropFilter: 'grayscale(1) contrast(100)',
-          transform: `translate(${drift.x}px, ${drift.y}px)`
-        }}
-      />
+      >
+        <div
+          className="absolute -inset-4 bg-white transition-transform duration-700"
+          aria-hidden="true"
+          style={{
+            clipPath: `url(#${clipId})`,
+            filter: 'drop-shadow(0 1px 2px rgb(0 0 0 / 0.95)) drop-shadow(0 0 1px rgb(0 0 0 / 0.7))',
+            transform: `translate(${drift.x}px, ${drift.y}px)`
+          }}
+        />
+      </div>
     </>
   );
 };
