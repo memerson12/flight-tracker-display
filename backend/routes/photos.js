@@ -21,7 +21,8 @@ if (!fs.existsSync(PHOTOS_DIR)) fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 if (!fs.existsSync(THUMBS_DIR)) fs.mkdirSync(THUMBS_DIR, { recursive: true });
 
 // Multer setup (store in tmp) with limits
-const MAX_FILE_SIZE = Number(process.env.MAX_PHOTO_SIZE) || 8 * 1024 * 1024; // 8MB default
+const MAX_FILE_SIZE = Number(process.env.MAX_PHOTO_SIZE) || 25 * 1024 * 1024; // 25MB default
+const MAX_FILE_SIZE_MB = Math.ceil(MAX_FILE_SIZE / (1024 * 1024));
 const upload = multer({ 
   dest: path.join(os.tmpdir(), 'flights-uploads'),
   limits: { fileSize: MAX_FILE_SIZE },
@@ -31,6 +32,23 @@ const upload = multer({
     cb(null, true);
   }
 });
+const uploadPhotoFields = upload.fields([
+  { name: 'files', maxCount: 20 },
+  { name: 'file', maxCount: 20 }
+]);
+
+const handlePhotoUpload = (req, res, next) => {
+  uploadPhotoFields(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: `Each photo must be ${MAX_FILE_SIZE_MB} MB or smaller.` });
+    }
+    if (error.message === 'UNSUPPORTED_FILE_TYPE') {
+      return res.status(400).json({ error: 'Unsupported file type. Use JPEG, PNG, or WebP.' });
+    }
+    return next(error);
+  });
+};
 
 // Rate limiter for uploads
 const uploadLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 }); // 10 uploads per minute per IP
@@ -56,10 +74,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/photos (admin)
-router.post('/', adminAuth, uploadLimiter, upload.fields([
-  { name: 'files', maxCount: 20 },
-  { name: 'file', maxCount: 20 }
-]), async (req, res) => {
+router.post('/', adminAuth, uploadLimiter, handlePhotoUpload, async (req, res) => {
   try {
     const uploadedFiles = [
       ...(req.files?.files || []),
@@ -67,14 +82,6 @@ router.post('/', adminAuth, uploadLimiter, upload.fields([
     ];
 
     if (uploadedFiles.length === 0) return res.status(400).json({ error: 'Missing files' });
-
-    // Multer's fileFilter will reject unsupported types; detect and return proper code
-    if (req.fileValidationError) {
-      for (const file of uploadedFiles) {
-        try { fs.unlinkSync(file.path); } catch (e) {}
-      }
-      return res.status(400).json({ error: 'Unsupported file type' });
-    }
 
     const created = [];
 

@@ -2,8 +2,10 @@ const assert = require('assert');
 const request = require('supertest');
 const path = require('path');
 const TEST_ADMIN_PASSWORD = 'test-admin-password';
+const TEST_MAX_PHOTO_SIZE = 1024 * 1024;
 
 process.env.ADMIN_PASSWORD = TEST_ADMIN_PASSWORD;
+process.env.MAX_PHOTO_SIZE = String(TEST_MAX_PHOTO_SIZE);
 
 describe('Photos API (smoke)', function() {
   it('GET /api/photos returns 200', function(done) {
@@ -56,6 +58,39 @@ describe('Photos API (smoke)', function() {
               .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
               .expect(204, done);
           });
+      });
+  });
+
+  it('returns a useful JSON error for oversized photos', function(done) {
+    this.timeout(5000);
+    const server = require('../server');
+
+    request(server)
+      .post('/api/photos')
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .attach('file', Buffer.alloc(TEST_MAX_PHOTO_SIZE + 1), 'too-large.jpg')
+      .expect(413)
+      .expect('Content-Type', /json/)
+      .end(function(err, res) {
+        if (err) return done(err);
+        assert.strictEqual(res.body.error, 'Each photo must be 1 MB or smaller.');
+        done();
+      });
+  });
+
+  it('returns a useful JSON error for unsupported files', function(done) {
+    const server = require('../server');
+
+    request(server)
+      .post('/api/photos')
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .attach('file', Buffer.from('not an image'), 'notes.txt')
+      .expect(400)
+      .expect('Content-Type', /json/)
+      .end(function(err, res) {
+        if (err) return done(err);
+        assert.strictEqual(res.body.error, 'Unsupported file type. Use JPEG, PNG, or WebP.');
+        done();
       });
   });
 });

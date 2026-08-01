@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
 import { buildMapboxGeocodingUrl } from '@/lib/mapboxGeocoding';
+import { getPhotoSizeError } from '@/lib/photoUpload';
 import { inferTimeZone, isValidTimeZone, resolveTimeZone } from '@/lib/timeSettings';
 import { SettingsResponse } from '@/types/settings';
 
@@ -613,6 +614,9 @@ const Admin = () => {
 
   const handleUpload = async (files: File[]) => {
     try {
+      const sizeError = getPhotoSizeError(files);
+      if (sizeError) throw new Error(sizeError);
+
       const formData = new FormData();
       files.forEach((file) => formData.append('files', file));
 

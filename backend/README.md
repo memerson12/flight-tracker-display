@@ -44,6 +44,6 @@ API (high-level)
 
 Notes
 
-- Upload size limit defaults to 8MB and can be changed with `MAX_PHOTO_SIZE` env var.
+- Upload size limit defaults to 25MB per photo and can be changed with the `MAX_PHOTO_SIZE` environment variable (in bytes).
 - Rate limiting applies to uploads (10 uploads per minute per IP).
 - Photo uploads are auto-oriented and re-encoded without public EXIF metadata. When GPS is embedded, the backend stores the coordinates privately and uses `MAPBOX_TOKEN` or `VITE_MAPBOX_TOKEN` to create the coarse location label returned by the API.
