@@ -5,7 +5,8 @@ import {
   getDesiredDisplayScene,
   getNextFlightId,
   getSceneTransitionDelayMs,
-  mergeFlightSnapshots
+  mergeFlightSnapshots,
+  reconcileFlightAvailability
 } from './flightDisplayState';
 
 const flight = (id: string, altitude: number): Flight => ({
@@ -78,5 +79,47 @@ describe('display scene dwell time', () => {
   it('does not schedule a transition when the current scene is still desired', () => {
     expect(getSceneTransitionDelayMs('slideshow', false, 1_000, 20_000, 15_000)).toBeNull();
     expect(getSceneTransitionDelayMs('flights', true, 1_000, 20_000, 15_000)).toBeNull();
+  });
+});
+
+describe('flight availability confirmation', () => {
+  it('accepts a non-empty poll immediately and clears empty-poll history', () => {
+    expect(reconcileFlightAvailability(
+      { hasFlights: false, consecutiveEmptyPolls: 2 },
+      5,
+      0,
+      3
+    )).toEqual({ hasFlights: true, consecutiveEmptyPolls: 0 });
+  });
+
+  it('ignores isolated empty polls when several displayed flights vanish together', () => {
+    const firstEmpty = reconcileFlightAvailability(
+      { hasFlights: true, consecutiveEmptyPolls: 0 },
+      0,
+      5,
+      3
+    );
+    const secondEmpty = reconcileFlightAvailability(firstEmpty, 0, 5, 3);
+
+    expect(firstEmpty).toEqual({ hasFlights: true, consecutiveEmptyPolls: 1 });
+    expect(secondEmpty).toEqual({ hasFlights: true, consecutiveEmptyPolls: 2 });
+  });
+
+  it('confirms an empty area after the required consecutive polls', () => {
+    expect(reconcileFlightAvailability(
+      { hasFlights: true, consecutiveEmptyPolls: 2 },
+      0,
+      5,
+      3
+    )).toEqual({ hasFlights: false, consecutiveEmptyPolls: 3 });
+  });
+
+  it('allows the final displayed flight to leave without extra empty-poll delay', () => {
+    expect(reconcileFlightAvailability(
+      { hasFlights: true, consecutiveEmptyPolls: 0 },
+      0,
+      1,
+      3
+    )).toEqual({ hasFlights: false, consecutiveEmptyPolls: 0 });
   });
 });

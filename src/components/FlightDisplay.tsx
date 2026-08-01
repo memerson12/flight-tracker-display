@@ -4,10 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { samplePhotos } from '@/data/sampleFlights';
 import {
   type DisplayScene,
+  type FlightAvailabilityState,
   getDesiredDisplayScene,
   getNextFlightId,
   getSceneTransitionDelayMs,
-  mergeFlightSnapshots
+  mergeFlightSnapshots,
+  reconcileFlightAvailability
 } from '@/lib/flightDisplayState';
 import { resolveTimeZone } from '@/lib/timeSettings';
 import { normalizeEpochMilliseconds } from '@/lib/windowPosition';
@@ -39,6 +41,7 @@ type FlightLayers = {
 const EMPTY_FLIGHTS: Flight[] = [];
 const FLIGHT_ROTATION_MS = 15_000;
 const MINIMUM_SCENE_DWELL_MS = 15_000;
+const SUSPICIOUS_EMPTY_POLLS_REQUIRED = 3;
 const FLIGHT_SWIPE_MS = 1100;
 
 const fetchFlights = async (): Promise<FlightResponse> => {
@@ -81,7 +84,14 @@ const FlightStage = ({ flight, isLingering }: { flight: Flight | null; isLingeri
   });
 
   useEffect(() => {
-    if (!flight) return;
+    if (!flight) {
+      setLayers((previousLayers) => ({
+        current: null,
+        previous: null,
+        sequence: previousLayers.sequence
+      }));
+      return;
+    }
 
     setLayers((previousLayers) => {
       if (!previousLayers.current) {
@@ -139,14 +149,19 @@ const FlightDisplay = () => {
   const [displayFlights, setDisplayFlights] = useState<Flight[]>([]);
   const [activeFlightId, setActiveFlightId] = useState<string | null>(null);
   const [displayScene, setDisplayScene] = useState<DisplayScene>('slideshow');
+  const [hasConfirmedFlights, setHasConfirmedFlights] = useState(false);
   const sceneEnteredAtRef = useRef(Date.now());
+  const availabilityRef = useRef<FlightAvailabilityState>({
+    hasFlights: false,
+    consecutiveEmptyPolls: 0
+  });
 
   const { data, isError } = useQuery({
     queryKey: ['flights'],
     queryFn: fetchFlights,
     refetchInterval: (query) => {
       const flightCount = query.state.data?.flights?.length || 0;
-      return flightCount > 0 ? 15000 : 30000;
+      return flightCount > 0 || availabilityRef.current.hasFlights ? 15000 : 30000;
     },
     refetchIntervalInBackground: true
   });
@@ -165,7 +180,7 @@ const FlightDisplay = () => {
     refetchIntervalInBackground: true
   });
 
-  const liveFlights = isError ? EMPTY_FLIGHTS : (data?.flights ?? EMPTY_FLIGHTS);
+  const liveFlights = data?.flights ?? EMPTY_FLIGHTS;
   const hasLiveFlights = liveFlights.length > 0;
   const showFlightLayer = displayScene === 'flights';
 
@@ -208,29 +223,43 @@ const FlightDisplay = () => {
   ]);
 
   useEffect(() => {
-    if (!hasLiveFlights) return;
+    if (isError || !data) return;
 
+    const nextAvailability = reconcileFlightAvailability(
+      availabilityRef.current,
+      liveFlights.length,
+      displayFlights.length,
+      SUSPICIOUS_EMPTY_POLLS_REQUIRED
+    );
+    availabilityRef.current = nextAvailability;
+    setHasConfirmedFlights(nextAvailability.hasFlights);
+
+    if (!hasLiveFlights) return;
     setDisplayFlights((previous) => mergeFlightSnapshots(previous, liveFlights));
     setActiveFlightId((previousId) => (
       previousId && liveFlights.some((flight) => flight.id === previousId)
         ? previousId
         : liveFlights[0].id
     ));
-  }, [hasLiveFlights, liveFlights]);
+  }, [data, displayFlights.length, hasLiveFlights, isError, liveFlights]);
 
   useEffect(() => {
     const transitionDelay = getSceneTransitionDelayMs(
       displayScene,
-      hasLiveFlights,
+      hasConfirmedFlights,
       sceneEnteredAtRef.current,
       Date.now(),
       MINIMUM_SCENE_DWELL_MS
     );
     if (transitionDelay === null) return;
 
-    const desiredScene = getDesiredDisplayScene(hasLiveFlights);
+    const desiredScene = getDesiredDisplayScene(hasConfirmedFlights);
     const switchScene = () => {
       sceneEnteredAtRef.current = Date.now();
+      if (desiredScene === 'slideshow') {
+        setDisplayFlights([]);
+        setActiveFlightId(null);
+      }
       setDisplayScene(desiredScene);
     };
 
@@ -241,7 +270,7 @@ const FlightDisplay = () => {
 
     const transitionTimer = window.setTimeout(switchScene, transitionDelay);
     return () => window.clearTimeout(transitionTimer);
-  }, [displayScene, hasLiveFlights]);
+  }, [displayScene, hasConfirmedFlights]);
 
   useEffect(() => {
     if (!showFlightLayer || rotatingFlightIdsRef.current.length < 2) return;
@@ -273,13 +302,13 @@ const FlightDisplay = () => {
         className={`display-layer ${showFlightLayer ? 'display-layer-visible' : 'display-layer-hidden'}`}
         aria-hidden={!showFlightLayer}
       >
-        <FlightStage flight={currentFlight} isLingering={!hasLiveFlights && showFlightLayer} />
+        <FlightStage flight={currentFlight} isLingering={!hasConfirmedFlights && showFlightLayer} />
 
         {currentFlight && settingsData?.windowPosition?.enabled && (
           <WindowPositionRail flight={currentFlight} settings={settingsData.windowPosition} />
         )}
 
-        {displayFlights.length > 1 && (
+        {showFlightLayer && displayFlights.length > 1 && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 w-44">
             <div className="flight-rotation-track mb-2" aria-hidden="true">
               <div

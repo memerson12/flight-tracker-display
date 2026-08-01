@@ -2,6 +2,11 @@ import { Flight } from '@/types/flight';
 
 export type DisplayScene = 'flights' | 'slideshow';
 
+export type FlightAvailabilityState = {
+  hasFlights: boolean;
+  consecutiveEmptyPolls: number;
+};
+
 /**
  * Refresh flight details without allowing provider result ordering to reshuffle
  * the display on every poll. Existing flights keep their current order and new
@@ -28,6 +33,32 @@ export const getNextFlightId = (flightIds: string[], currentId: string | null): 
 export const getDesiredDisplayScene = (hasLiveFlights: boolean): DisplayScene => (
   hasLiveFlights ? 'flights' : 'slideshow'
 );
+
+/**
+ * A provider occasionally returns an empty snapshot between large, healthy
+ * snapshots. Confirm that abrupt disappearance across several polls while
+ * still allowing a single remaining flight to leave without an added linger.
+ */
+export const reconcileFlightAvailability = (
+  previous: FlightAvailabilityState,
+  liveFlightCount: number,
+  retainedFlightCount: number,
+  emptyPollsRequired: number
+): FlightAvailabilityState => {
+  if (liveFlightCount > 0) {
+    return { hasFlights: true, consecutiveEmptyPolls: 0 };
+  }
+
+  if (!previous.hasFlights || retainedFlightCount <= 1) {
+    return { hasFlights: false, consecutiveEmptyPolls: 0 };
+  }
+
+  const consecutiveEmptyPolls = previous.consecutiveEmptyPolls + 1;
+  return {
+    hasFlights: consecutiveEmptyPolls < emptyPollsRequired,
+    consecutiveEmptyPolls
+  };
+};
 
 /**
  * Returns null when the current scene already matches flight availability.
