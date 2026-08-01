@@ -2,13 +2,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
 import { buildMapboxGeocodingUrl } from '@/lib/mapboxGeocoding';
-import { getPhotoSizeError } from '@/lib/photoUpload';
+import {
+  formatPhotoUploadSize,
+  getPhotoSizeError,
+  type PhotoUploadStatus,
+  type PhotoUploadStatusListener,
+  uploadPhotoFiles
+} from '@/lib/photoUpload';
 import { inferTimeZone, isValidTimeZone, resolveTimeZone } from '@/lib/timeSettings';
 import { SettingsResponse } from '@/types/settings';
 
@@ -612,24 +620,13 @@ const Admin = () => {
     setToken('');
   };
 
-  const handleUpload = async (files: File[]) => {
+  const handleUpload = async (files: File[], onStatus: PhotoUploadStatusListener) => {
     try {
       const sizeError = getPhotoSizeError(files);
       if (sizeError) throw new Error(sizeError);
 
-      const formData = new FormData();
-      files.forEach((file) => formData.append('files', file));
-
-      const response = await fetch('/api/photos', {
-        method: 'POST',
-        headers: authHeaders,
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(await getResponseError(response, 'Upload failed'));
-      }
-
+      await uploadPhotoFiles(files, token, onStatus);
+      onStatus({ stage: 'refreshing', progress: 100 });
       await refetchPhotos();
       toast.success(`${files.length} photo${files.length === 1 ? '' : 's'} uploaded.`);
     } catch (error) {
@@ -1368,7 +1365,7 @@ const Admin = () => {
         </section>
 
         <section className="card-glass rounded-3xl p-4 sm:p-6 lg:p-8 space-y-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <h2 className="text-2xl font-semibold">Photo Library</h2>
             <PhotoUpload onUpload={handleUpload} />
           </div>
@@ -1437,39 +1434,117 @@ const Admin = () => {
   );
 };
 
-  const PhotoUpload = ({ onUpload }: { onUpload: (files: File[]) => Promise<void> }) => {
+type PhotoUploadDisplayStatus = PhotoUploadStatus | {
+  stage: 'complete' | 'error';
+  progress: number;
+  message?: string;
+};
+
+const getUploadStatusLabel = (status: PhotoUploadDisplayStatus) => {
+  switch (status.stage) {
+    case 'uploading':
+      return `Uploading photos… ${status.progress}%`;
+    case 'processing':
+      return 'Upload complete. Processing photos…';
+    case 'refreshing':
+      return 'Processing complete. Refreshing library…';
+    case 'complete':
+      return 'Photos added to the library.';
+    case 'error':
+      return status.message || 'Upload failed. You can try again.';
+  }
+};
+
+const getUploadButtonLabel = (status: PhotoUploadDisplayStatus | null) => {
+  if (status?.stage === 'processing') return 'Processing…';
+  if (status?.stage === 'refreshing') return 'Finishing…';
+  return 'Uploading…';
+};
+
+const PhotoUpload = ({
+  onUpload
+}: {
+  onUpload: (files: File[], onStatus: PhotoUploadStatusListener) => Promise<void>;
+}) => {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState<PhotoUploadDisplayStatus | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
   const handleSubmit = async () => {
     if (files.length === 0) return;
     setUploading(true);
+    setStatus({ stage: 'uploading', progress: 0 });
     try {
-      await onUpload(files);
+      await onUpload(files, setStatus);
       setFiles([]);
-    } catch {
-      // The parent action reports the upload error and keeps the selection for retry.
+      if (inputRef.current) inputRef.current.value = '';
+      setStatus({ stage: 'complete', progress: 100 });
+    } catch (error) {
+      setStatus({
+        stage: 'error',
+        progress: 0,
+        message: error instanceof Error ? error.message : 'Upload failed. You can try again.'
+      });
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-      <Input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={(event) => setFiles(Array.from(event.target.files || []))}
-        className="min-w-0 w-full sm:w-72"
-      />
-      <Button
-        className="w-full whitespace-nowrap sm:w-auto"
-        onClick={handleSubmit}
-        disabled={files.length === 0 || uploading}
-      >
-        {uploading ? 'Uploading...' : 'Upload photos'}
-      </Button>
+    <div className="w-full min-w-0 space-y-2 lg:max-w-xl">
+      <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={uploading}
+          onChange={(event) => {
+            setFiles(Array.from(event.target.files || []));
+            setStatus(null);
+          }}
+          className="min-w-0 w-full sm:w-72"
+        />
+        <Button
+          className="w-full whitespace-nowrap sm:w-auto"
+          onClick={handleSubmit}
+          disabled={files.length === 0 || uploading}
+        >
+          {uploading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          {uploading ? getUploadButtonLabel(status) : 'Upload photos'}
+        </Button>
+      </div>
+
+      {files.length > 0 && !uploading && status?.stage !== 'complete' && (
+        <p className="text-xs text-muted-foreground">
+          {files.length} photo{files.length === 1 ? '' : 's'} selected · {formatPhotoUploadSize(totalSize)}
+        </p>
+      )}
+
+      {status && (
+        <div
+          className="space-y-2"
+          role="status"
+          aria-live="polite"
+          aria-label={getUploadStatusLabel(status)}
+        >
+          <Progress
+            value={status.progress}
+            className={status.stage === 'error' ? 'h-2 [&>div]:bg-destructive' : 'h-2'}
+          />
+          <div className={`flex items-center gap-2 text-xs ${status.stage === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {status.stage === 'complete' ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+            ) : status.stage !== 'error' ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : null}
+            <span>{getUploadStatusLabel(status)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
