@@ -187,9 +187,9 @@ const Admin = () => {
   const [settingsMessage, setSettingsMessage] = useState('');
   const [settingsMessageIsError, setSettingsMessageIsError] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
-  const [configMessage, setConfigMessage] = useState('');
-  const [configMessageIsError, setConfigMessageIsError] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
+  const [locationSetupMessage, setLocationSetupMessage] = useState('');
+  const [locationSetupMessageIsError, setLocationSetupMessageIsError] = useState(false);
+  const [locationSetupSaving, setLocationSetupSaving] = useState(false);
   const [photoActionId, setPhotoActionId] = useState<string | null>(null);
 
   const [provider, setProvider] = useState('flightradar24');
@@ -706,15 +706,16 @@ const Admin = () => {
     }
   };
 
-  const handleSaveSettings = async () => {
+  const getDisplaySettingsValidationError = () => {
+    if (!isValidTimeZone(clockTimeZone)) {
+      return 'Enter a valid IANA time zone, such as Australia/Brisbane.';
+    }
+    return null;
+  };
+
+  const getWindowPositionValidationError = () => {
     const parsedLatitude = Number(observerLatitude);
     const parsedLongitude = Number(observerLongitude);
-    if (!isValidTimeZone(clockTimeZone)) {
-      setSettingsMessage('Enter a valid IANA time zone, such as Australia/Brisbane.');
-      setSettingsMessageIsError(true);
-      toast.error('Enter a valid display time zone.');
-      return;
-    }
     if (
       windowPositionEnabled
       && (
@@ -724,9 +725,78 @@ const Admin = () => {
         || !Number.isFinite(parsedLongitude)
       )
     ) {
-      setSettingsMessage('Resolve the display address before enabling the position indicator.');
+      return 'Resolve the viewer address before enabling the position indicator.';
+    }
+    const parsedBearing = Number(windowBearing);
+    if (!Number.isFinite(parsedBearing) || parsedBearing < 0 || parsedBearing > 359) {
+      return 'Looking direction must be between 0° and 359°.';
+    }
+    const parsedViewAngle = Number(windowViewAngle);
+    if (!Number.isFinite(parsedViewAngle) || parsedViewAngle < 10 || parsedViewAngle > 180) {
+      return 'Window view must be between 10° and 180°.';
+    }
+    return null;
+  };
+
+  const saveDisplaySettings = async () => {
+    const response = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify({
+        slideshow: {
+          interval: Number(slideshowInterval),
+          shuffle: slideshowShuffle,
+          fitMode: slideshowFit
+        },
+        clock: {
+          use24Hour: clockUse24Hour,
+          timeZone: clockTimeZone
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await getResponseError(response, 'Failed to update display settings'));
+    }
+
+    await refetchSettings();
+  };
+
+  const saveWindowPositionSettings = async () => {
+    const response = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify({
+        windowPosition: {
+          enabled: windowPositionEnabled,
+          address: observerAddress.trim(),
+          latitude: observerLatitude === '' ? null : Number(observerLatitude),
+          longitude: observerLongitude === '' ? null : Number(observerLongitude),
+          bearing: Number(windowBearing),
+          viewAngle: Number(windowViewAngle)
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await getResponseError(response, 'Failed to update the viewer position'));
+    }
+
+    await refetchSettings();
+  };
+
+  const handleSaveSettings = async () => {
+    const validationError = getDisplaySettingsValidationError();
+    if (validationError) {
+      setSettingsMessage(validationError);
       setSettingsMessageIsError(true);
-      toast.error('Resolve the viewer address before saving.');
+      toast.error(validationError);
       return;
     }
 
@@ -734,38 +804,7 @@ const Admin = () => {
     setSettingsMessageIsError(false);
     setSettingsSaving(true);
     try {
-      const response = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders
-        },
-        body: JSON.stringify({
-          slideshow: {
-            interval: Number(slideshowInterval),
-            shuffle: slideshowShuffle,
-            fitMode: slideshowFit
-          },
-          windowPosition: {
-            enabled: windowPositionEnabled,
-            address: observerAddress.trim(),
-            latitude: observerLatitude === '' ? null : parsedLatitude,
-            longitude: observerLongitude === '' ? null : parsedLongitude,
-            bearing: Number(windowBearing),
-            viewAngle: Number(windowViewAngle)
-          },
-          clock: {
-            use24Hour: clockUse24Hour,
-            timeZone: clockTimeZone
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(await getResponseError(response, 'Failed to update display settings'));
-      }
-
-      await refetchSettings();
+      await saveDisplaySettings();
       setSettingsMessage('Display settings saved.');
       toast.success('Display settings saved.');
     } catch (error) {
@@ -787,7 +826,7 @@ const Admin = () => {
     setObserverSuggestions([]);
     if (inferredTimeZone) setClockTimeZone(inferredTimeZone);
     setObserverStatus(
-      `Selected ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${inferredTimeZone ? ` · ${inferredTimeZone}` : ''}. Save display position to apply it.`
+      `Selected ${latitude.toFixed(6)}, ${longitude.toFixed(6)}${inferredTimeZone ? ` · ${inferredTimeZone}` : ''}. Save the location setup to apply it.`
     );
   };
 
@@ -822,7 +861,7 @@ const Admin = () => {
       }
 
       handleSelectObserverAddress(feature);
-      toast.success('Viewer address resolved. Save display position to apply it.');
+      toast.success('Viewer address resolved. Save the location setup to apply it.');
     } catch (error) {
       setObserverStatus('Failed to resolve the address.');
       toast.error('Failed to resolve the viewer address.');
@@ -831,23 +870,20 @@ const Admin = () => {
     }
   };
 
-  const handleSaveConfig = async () => {
-    const numericValues = locationMode === 'circle'
-      ? [Number(latitude), Number(longitude), Number(radius)]
-      : [Number(nwLat), Number(nwLon), Number(seLat), Number(seLon)];
-    if (numericValues.some((value) => !Number.isFinite(value))) {
-      setConfigMessage('Enter valid numeric coordinates before saving.');
-      setConfigMessageIsError(true);
-      toast.error('Location contains invalid coordinates.');
-      return;
+  const getTrackingConfigValidationError = () => {
+    const coordinateValues = locationMode === 'circle'
+      ? [latitude, longitude, radius]
+      : [nwLat, nwLon, seLat, seLon];
+    if (coordinateValues.some((value) => value.trim() === '' || !Number.isFinite(Number(value)))) {
+      return 'Enter valid numeric coordinates before saving.';
     }
     if (locationMode === 'circle' && Number(radius) <= 0) {
-      setConfigMessage('Radius must be greater than zero.');
-      setConfigMessageIsError(true);
-      toast.error('Radius must be greater than zero.');
-      return;
+      return 'Radius must be greater than zero.';
     }
+    return null;
+  };
 
+  const buildTrackingConfigPayload = (): ConfigResponse => {
     const payload: ConfigResponse = {
       provider,
       location: null,
@@ -875,34 +911,51 @@ const Admin = () => {
         }
       };
     }
+    return payload;
+  };
 
-    setConfigSaving(true);
-    setConfigMessage('Saving location...');
-    setConfigMessageIsError(false);
+  const saveTrackingConfig = async () => {
+    const response = await fetch('/api/config', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
+      body: JSON.stringify(buildTrackingConfigPayload())
+    });
+
+    if (!response.ok) {
+      throw new Error(await getResponseError(response, 'Failed to update location and provider'));
+    }
+
+    await refetchConfig();
+  };
+
+  const handleSaveLocationSetup = async () => {
+    const validationError = getWindowPositionValidationError() || getTrackingConfigValidationError();
+    if (validationError) {
+      setLocationSetupMessage(validationError);
+      setLocationSetupMessageIsError(true);
+      toast.error(validationError);
+      return;
+    }
+
+    setLocationSetupSaving(true);
+    setLocationSetupMessage('Saving viewer and tracking area...');
+    setLocationSetupMessageIsError(false);
     try {
-      const response = await fetch('/api/config', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error(await getResponseError(response, 'Failed to update location and provider'));
-      }
-
-      await refetchConfig();
-      setConfigMessage('Location and provider saved. Flight tracking is using the new area.');
-      toast.success('Location and provider saved.');
+      // Both endpoints persist the same config file, so these writes must remain sequential.
+      await saveWindowPositionSettings();
+      await saveTrackingConfig();
+      setLocationSetupMessage('Location setup saved. Flight tracking is using the new area.');
+      toast.success('Location setup saved.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update location and provider';
-      setConfigMessage(message);
-      setConfigMessageIsError(true);
+      const message = error instanceof Error ? error.message : 'Failed to save the location setup';
+      setLocationSetupMessage(message);
+      setLocationSetupMessageIsError(true);
       toast.error(message);
     } finally {
-      setConfigSaving(false);
+      setLocationSetupSaving(false);
     }
   };
 
@@ -1019,7 +1072,7 @@ const Admin = () => {
         <section className="card-glass rounded-3xl p-8 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-semibold">Slideshow Settings</h2>
-            <Button onClick={handleSaveSettings} disabled={settingsSaving}>
+            <Button onClick={handleSaveSettings} disabled={settingsSaving || locationSetupSaving}>
               {settingsSaving ? 'Saving...' : 'Save settings'}
             </Button>
           </div>
@@ -1103,29 +1156,44 @@ const Admin = () => {
               </p>
             </div>
           </div>
+
+          {settingsMessage && (
+            <p className={`text-sm ${settingsMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
+              {settingsMessage}
+            </p>
+          )}
         </section>
 
-        <section className="card-glass rounded-3xl p-8 space-y-6">
+        <section className="card-glass rounded-3xl p-4 sm:p-6 lg:p-8 space-y-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-2xl font-semibold">Location + Display Position</h2>
               <p className="text-muted-foreground mt-1">Configure the tracked airspace and where the viewer sits relative to it.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-muted-foreground">Show on flight screen</span>
-              <Switch
-                aria-label="Show window position indicator"
-                checked={windowPositionEnabled}
-                onCheckedChange={setWindowPositionEnabled}
-              />
-              <Button onClick={handleSaveSettings} disabled={settingsSaving}>
-                {settingsSaving ? 'Saving...' : 'Save viewer'}
-              </Button>
-              <Button onClick={handleSaveConfig} disabled={configSaving}>
-                {configSaving ? 'Saving...' : 'Save tracking area'}
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center justify-between gap-3 sm:justify-start">
+                <span className="text-sm text-muted-foreground">Show on flight screen</span>
+                <Switch
+                  aria-label="Show window position indicator"
+                  checked={windowPositionEnabled}
+                  onCheckedChange={setWindowPositionEnabled}
+                />
+              </div>
+              <Button
+                className="w-full whitespace-nowrap sm:w-auto"
+                onClick={handleSaveLocationSetup}
+                disabled={locationSetupSaving || settingsSaving}
+              >
+                {locationSetupSaving ? 'Saving setup...' : 'Save location setup'}
               </Button>
             </div>
           </div>
+
+          {locationSetupMessage && (
+            <p className={`text-sm ${locationSetupMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
+              {locationSetupMessage}
+            </p>
+          )}
 
           <div>
             <h3 className="text-lg font-medium">Viewer + Window Position</h3>
@@ -1205,23 +1273,12 @@ const Admin = () => {
             </div>
           </div>
 
-          {settingsMessage && (
-            <p className={`text-sm ${settingsMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
-              {settingsMessage}
-            </p>
-          )}
-
           <div className="border-t border-border/60 pt-6 space-y-6">
             <div>
               <h3 className="text-lg font-medium">Flight Tracking Area</h3>
               <p className="text-sm text-muted-foreground mt-1">Choose the provider and the airspace shown on the display.</p>
             </div>
 
-            {configMessage && (
-              <p className={`text-sm ${configMessageIsError ? 'text-aviation-red' : 'text-primary'}`} role="status">
-                {configMessage}
-              </p>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm text-muted-foreground">Provider</label>
