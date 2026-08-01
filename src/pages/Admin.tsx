@@ -181,7 +181,6 @@ const Admin = () => {
   const [windowBearing, setWindowBearing] = useState('90');
   const [windowViewAngle, setWindowViewAngle] = useState('90');
   const [observerStatus, setObserverStatus] = useState('');
-  const [observerResolving, setObserverResolving] = useState(false);
   const [observerSuggestions, setObserverSuggestions] = useState<MapboxFeature[]>([]);
   const [observerSearching, setObserverSearching] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
@@ -217,7 +216,8 @@ const Admin = () => {
   const dragCurrentRef = useRef<RectangleBounds | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MapboxFeature[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [trackingSearchResolved, setTrackingSearchResolved] = useState(false);
+  const [trackingSearchStatus, setTrackingSearchStatus] = useState('');
   const [mapError, setMapError] = useState('');
   const [rectBounds, setRectBounds] = useState<RectangleBounds>(defaultBounds);
   const rectBoundsRef = useRef(rectBounds);
@@ -351,9 +351,15 @@ const Admin = () => {
 
   useEffect(() => {
     const query = observerAddress.trim();
-    if (!mapboxToken || query.length < 3 || observerLatitude || observerLongitude) {
+    if (query.length < 3 || observerLatitude || observerLongitude) {
       setObserverSuggestions([]);
       setObserverSearching(false);
+      return;
+    }
+    if (!mapboxToken) {
+      setObserverSuggestions([]);
+      setObserverSearching(false);
+      setObserverStatus('Missing Mapbox token. Address search is unavailable.');
       return;
     }
 
@@ -367,10 +373,13 @@ const Admin = () => {
         }), { signal: controller.signal });
         if (!response.ok) throw new Error('Address search failed');
         const data = await response.json();
-        setObserverSuggestions(data.features || []);
+        const features = (data.features || []) as MapboxFeature[];
+        setObserverSuggestions(features);
+        setObserverStatus(features.length === 0 ? 'No matching addresses found.' : '');
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setObserverSuggestions([]);
+        setObserverStatus('Failed to search addresses.');
       } finally {
         if (!controller.signal.aborted) setObserverSearching(false);
       }
@@ -381,6 +390,45 @@ const Admin = () => {
       controller.abort();
     };
   }, [mapboxToken, observerAddress, observerLatitude, observerLongitude]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (locationMode !== 'rectangle' || trackingSearchResolved || query.length < 3) {
+      setSearchResults([]);
+      if (query.length < 3) setTrackingSearchStatus('');
+      return;
+    }
+    if (!mapboxToken) {
+      setSearchResults([]);
+      setTrackingSearchStatus('Missing Mapbox token. Address search is unavailable.');
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setTrackingSearchStatus('Searching addresses…');
+      try {
+        const response = await fetch(buildMapboxGeocodingUrl({
+          query,
+          accessToken: mapboxToken
+        }), { signal: controller.signal });
+        if (!response.ok) throw new Error('Address search failed');
+        const data = await response.json();
+        const features = (data.features || []) as MapboxFeature[];
+        setSearchResults(features);
+        setTrackingSearchStatus(features.length === 0 ? 'No matching addresses found.' : '');
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setSearchResults([]);
+        setTrackingSearchStatus('Failed to search addresses.');
+      }
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [locationMode, mapboxToken, searchQuery, trackingSearchResolved]);
 
   useEffect(() => {
     if (locationMode !== 'rectangle') return;
@@ -830,46 +878,6 @@ const Admin = () => {
     );
   };
 
-  const handleResolveObserverAddress = async () => {
-    if (!mapboxToken) {
-      setObserverStatus('Missing Mapbox token. The address cannot be resolved on this device.');
-      toast.error('Mapbox token is missing.');
-      return;
-    }
-    if (!observerAddress.trim()) {
-      setObserverStatus('Enter an address first.');
-      toast.error('Enter a viewer address first.');
-      return;
-    }
-
-    setObserverResolving(true);
-    setObserverStatus('Resolving address...');
-    try {
-      const response = await fetch(buildMapboxGeocodingUrl({
-        query: observerAddress,
-        accessToken: mapboxToken,
-        limit: 1,
-        autocomplete: false
-      }));
-      if (!response.ok) throw new Error('Address lookup failed');
-      const data = await response.json();
-      const feature = data.features?.[0] as MapboxFeature | undefined;
-      if (!feature) {
-        setObserverStatus('No matching address found.');
-        toast.error('No matching viewer address found.');
-        return;
-      }
-
-      handleSelectObserverAddress(feature);
-      toast.success('Viewer address resolved. Save the location setup to apply it.');
-    } catch (error) {
-      setObserverStatus('Failed to resolve the address.');
-      toast.error('Failed to resolve the viewer address.');
-    } finally {
-      setObserverResolving(false);
-    }
-  };
-
   const getTrackingConfigValidationError = () => {
     const coordinateValues = locationMode === 'circle'
       ? [latitude, longitude, radius]
@@ -959,34 +967,12 @@ const Admin = () => {
     }
   };
 
-  const handleSearch = async () => {
-    if (!mapboxToken) {
-      setMapError('Missing Mapbox token. Set VITE_MAPBOX_TOKEN in .env.');
-      return;
-    }
-
-    if (!searchQuery.trim()) return;
-    setSearchLoading(true);
-    setMapError('');
-    try {
-      const response = await fetch(buildMapboxGeocodingUrl({
-        query: searchQuery,
-        accessToken: mapboxToken
-      }));
-      if (!response.ok) throw new Error('Search failed');
-      const data = await response.json();
-      setSearchResults(data.features || []);
-    } catch (error) {
-      setMapError('Failed to search address');
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
   const handleSelectSearch = (feature: MapboxFeature) => {
     const [lng, lat] = feature.center;
     setSearchResults([]);
     setSearchQuery(feature.place_name);
+    setTrackingSearchResolved(true);
+    setTrackingSearchStatus('Address selected. Adjust the bounds if needed, then save the location setup.');
     setLocationName(feature.place_name);
     setMapError('');
 
@@ -1203,29 +1189,34 @@ const Admin = () => {
           <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_0.6fr] gap-6">
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Viewer address</label>
-              <div className="flex gap-2">
-                <Input
-                  value={observerAddress}
-                  placeholder="85 Macquarie Street, Teneriffe QLD 4005 Australia"
-                  onChange={(event) => {
-                    setObserverAddress(event.target.value);
-                    setObserverLatitude('');
-                    setObserverLongitude('');
-                    setObserverStatus('Choose a matching address below or resolve the typed address.');
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleResolveObserverAddress();
-                    }
-                  }}
-                />
-                <Button variant="secondary" onClick={handleResolveObserverAddress} disabled={observerResolving}>
-                  {observerResolving ? 'Resolving' : 'Resolve address'}
-                </Button>
-              </div>
+              <Input
+                value={observerAddress}
+                placeholder="Start typing an address"
+                aria-label="Viewer address"
+                aria-autocomplete="list"
+                aria-controls={observerSuggestions.length > 0 ? 'viewer-address-suggestions' : undefined}
+                onChange={(event) => {
+                  setObserverAddress(event.target.value);
+                  setObserverLatitude('');
+                  setObserverLongitude('');
+                  setObserverStatus('');
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && observerSuggestions.length > 0) {
+                    event.preventDefault();
+                    handleSelectObserverAddress(observerSuggestions[0]);
+                  } else if (event.key === 'Escape') {
+                    setObserverSuggestions([]);
+                  }
+                }}
+              />
               {observerSuggestions.length > 0 && (
-                <div className="border border-border rounded-xl p-2 max-h-48 overflow-auto bg-background" role="listbox" aria-label="Viewer address suggestions">
+                <div
+                  id="viewer-address-suggestions"
+                  className="border border-border rounded-xl p-2 max-h-48 overflow-auto bg-background"
+                  role="listbox"
+                  aria-label="Viewer address suggestions"
+                >
                   {observerSuggestions.map((result) => (
                     <button
                       key={result.id}
@@ -1240,10 +1231,15 @@ const Admin = () => {
                   ))}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
+              <p
+                className={`text-xs ${observerStatus.startsWith('Failed') || observerStatus.startsWith('Missing') ? 'text-aviation-red' : 'text-muted-foreground'}`}
+                role="status"
+              >
                 {observerSearching ? 'Searching addresses…' : observerStatus || (observerLatitude && observerLongitude
                   ? `Saved coordinates: ${observerLatitude}, ${observerLongitude}`
-                  : 'The resolved coordinates are saved so the display does not need to geocode continuously.')}
+                  : observerSuggestions.length > 0
+                    ? 'Choose a matching address below.'
+                    : 'Type at least 3 characters, then choose a matching address.')}
               </p>
             </div>
 
@@ -1370,28 +1366,40 @@ const Admin = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Search address"
-                        value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            handleSearch();
-                          }
-                        }}
-                      />
-                      <Button onClick={handleSearch} disabled={searchLoading}>
-                        {searchLoading ? 'Searching' : 'Search'}
-                      </Button>
-                    </div>
+                  <div className="flex flex-col gap-2">
+                    <Input
+                      placeholder="Start typing an address"
+                      aria-label="Tracking area address"
+                      aria-autocomplete="list"
+                      aria-controls={searchResults.length > 0 ? 'tracking-address-suggestions' : undefined}
+                      value={searchQuery}
+                      onChange={(event) => {
+                        setSearchQuery(event.target.value);
+                        setTrackingSearchResolved(false);
+                        setTrackingSearchStatus('');
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && searchResults.length > 0) {
+                          event.preventDefault();
+                          handleSelectSearch(searchResults[0]);
+                        } else if (event.key === 'Escape') {
+                          setSearchResults([]);
+                        }
+                      }}
+                    />
                     {searchResults.length > 0 && (
-                      <div className="border border-border rounded-xl p-2 max-h-48 overflow-auto bg-background">
+                      <div
+                        id="tracking-address-suggestions"
+                        className="border border-border rounded-xl p-2 max-h-48 overflow-auto bg-background"
+                        role="listbox"
+                        aria-label="Tracking area address suggestions"
+                      >
                         {searchResults.map((result) => (
                           <button
                             key={result.id}
+                            type="button"
+                            role="option"
+                            aria-selected="false"
                             onClick={() => handleSelectSearch(result)}
                             className="block w-full text-left px-2 py-1.5 rounded-lg hover:bg-secondary text-sm"
                           >
@@ -1400,6 +1408,11 @@ const Admin = () => {
                         ))}
                       </div>
                     )}
+                    <p className={`text-xs ${trackingSearchStatus.startsWith('Failed') || trackingSearchStatus.startsWith('Missing') ? 'text-aviation-red' : 'text-muted-foreground'}`} role="status">
+                      {trackingSearchStatus || (searchResults.length > 0
+                        ? 'Choose a matching address below.'
+                        : 'Type at least 3 characters, then choose a matching address.')}
+                    </p>
                   </div>
                   <div className="relative h-80 rounded-2xl overflow-hidden border border-border/60">
                     <div ref={mapContainerRef} className="absolute inset-0" />
