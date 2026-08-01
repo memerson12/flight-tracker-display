@@ -39,7 +39,7 @@ const PhotoLayer = ({
 
   const usePortraitLayout = fitMode === 'contain' && orientation === 'portrait';
   const portraitSide = clockCorner === 'right' ? 'left' : 'right';
-  const captionSide = usePortraitLayout ? clockCorner : clockCorner === 'right' ? 'left' : 'right';
+  const locationSide = usePortraitLayout ? portraitSide : clockCorner === 'right' ? 'left' : 'right';
 
   return (
     <div className={`photo-layer absolute inset-0 ${className}`} onTransitionEnd={onTransitionEnd}>
@@ -48,7 +48,7 @@ const PhotoLayer = ({
         : 'absolute inset-0'}>
         <img
           src={photo.src}
-          alt={photo.caption || 'Family photo'}
+          alt={photo.location ? `Photo taken near ${photo.location}` : 'Family photo'}
           className={usePortraitLayout
             ? 'h-full w-auto max-w-[62vw] object-contain'
             : `w-full h-full ${fitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
@@ -61,14 +61,18 @@ const PhotoLayer = ({
         : 'absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/10'}
       />
 
-      {photo.caption && (
-        <div className={`${usePortraitLayout ? 'absolute bottom-24 w-[30%]' : 'absolute bottom-8 max-w-[62%]'} ${
-          captionSide === 'right' ? 'right-8 text-right' : 'left-8 text-left'
-        }`}
+      {photo.location && (
+        <div
+          className={`absolute bottom-8 flex max-w-[60%] items-center gap-2 text-white ${
+            locationSide === 'right' ? 'right-8 text-right' : 'left-8 text-left'
+          }`}
+          style={{ filter: 'drop-shadow(0 1px 2px rgb(0 0 0 / 0.95)) drop-shadow(0 0 2px rgb(0 0 0 / 0.8))' }}
         >
-          <p className={`text-white/90 font-light tracking-wide ${usePortraitLayout ? 'text-3xl leading-tight' : 'text-2xl'}`}>
-            {photo.caption}
-          </p>
+          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
+            <circle cx="12" cy="10" r="2.5" />
+          </svg>
+          <p className="text-lg font-medium leading-tight tracking-wide">{photo.location}</p>
         </div>
       )}
     </div>

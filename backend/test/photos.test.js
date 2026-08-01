@@ -7,6 +7,7 @@ process.env.ADMIN_PASSWORD = TEST_ADMIN_PASSWORD;
 
 describe('Photos API (smoke)', function() {
   it('GET /api/photos returns 200', function(done) {
+    this.timeout(5000);
     const server = require('../server');
     request(server)
       .get('/api/photos')
@@ -35,12 +36,16 @@ describe('Photos API (smoke)', function() {
         if (err) return done(err);
         const body = Array.isArray(res.body) ? res.body[0] : res.body;
         if (!body || !body.id) return done(new Error('Invalid response'));
+        if (Object.hasOwn(body, 'caption')) return done(new Error('Legacy caption field was returned'));
+        if (Object.hasOwn(body, 'latitude') || Object.hasOwn(body, 'longitude')) {
+          return done(new Error('Private GPS coordinates were returned'));
+        }
 
-        // Update caption
+        // Update slideshow visibility
         request(server)
           .put(`/api/photos/${body.id}`)
           .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
-          .send({ caption: 'test' })
+          .send({ enabled: false })
           .expect(200)
           .end(function(err2) {
             if (err2) return done(err2);

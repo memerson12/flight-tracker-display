@@ -44,5 +44,5 @@ export interface Flight {
 export interface Photo {
   id: string;
   src: string;
-  caption?: string;
+  location?: string;
 }

@@ -3,12 +3,14 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env'), quiet: true });
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 let sharp = require('sharp');
 
 const { randomUUID } = require('crypto');
 const metadataStore = require('../lib/metadataStore');
+const { resolvePhotoLocation } = require('../lib/photoLocation');
 const adminAuth = require('../middleware/adminAuth');
 
 const PHOTOS_DIR = path.join(__dirname, '..', 'photos');
@@ -33,13 +35,20 @@ const upload = multer({
 // Rate limiter for uploads
 const uploadLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 }); // 10 uploads per minute per IP
 
+const serializePhoto = (photo) => {
+  const safePhoto = { ...photo };
+  delete safePhoto.latitude;
+  delete safePhoto.longitude;
+  return safePhoto;
+};
+
 // GET /api/photos
 router.get('/', (req, res) => {
   try {
     const all = metadataStore.getAll();
     // If query param `admin=1` return everything, otherwise only enabled
-    if (req.query.admin === '1') return res.json(all);
-    return res.json(all.filter(p => p.enabled));
+    if (req.query.admin === '1') return res.json(all.map(serializePhoto));
+    return res.json(all.filter(p => p.enabled).map(serializePhoto));
   } catch (err) {
     console.error('Failed to read photos metadata', err.message);
     res.status(500).json({ error: 'Failed to read metadata' });
@@ -71,12 +80,14 @@ router.post('/', adminAuth, uploadLimiter, upload.fields([
 
     for (const file of uploadedFiles) {
       const id = randomUUID();
-      const ext = file.originalname.split('.').pop().toLowerCase();
+      const ext = file.mimetype === 'image/png' ? 'png' : file.mimetype === 'image/webp' ? 'webp' : 'jpg';
       const filename = `${id}.${ext}`;
       const dest = path.join(PHOTOS_DIR, filename);
+      const embeddedLocation = await resolvePhotoLocation(file.path);
 
       try {
         await sharp(file.path)
+          .autoOrient()
           .resize({ width: 3840, height: 2160, fit: 'inside' })
           .toFile(dest);
       } catch (err) {
@@ -108,13 +119,15 @@ router.post('/', adminAuth, uploadLimiter, upload.fields([
         filename: filename,
         url: `/photos/${filename}`,
         thumb: `/photos/thumbs/${thumbName}`,
-        caption: '',
+        latitude: embeddedLocation?.latitude,
+        longitude: embeddedLocation?.longitude,
+        location: embeddedLocation?.location,
         order: Date.now(),
         enabled: true,
         uploadedAt: new Date().toISOString()
       };
 
-      created.push(metadataStore.add(meta));
+      created.push(serializePhoto(metadataStore.add(meta)));
     }
 
     return res.status(201).json(created);
@@ -136,13 +149,12 @@ router.put('/:id', adminAuth, express.json(), (req, res) => {
   try {
     const { id } = req.params;
     const patch = {};
-    if (req.body.caption !== undefined) patch.caption = String(req.body.caption);
     if (req.body.order !== undefined) patch.order = Number(req.body.order);
     if (req.body.enabled !== undefined) patch.enabled = Boolean(req.body.enabled);
 
     const updated = metadataStore.update(id, patch);
     if (!updated) return res.status(404).json({ error: 'Not found' });
-    return res.json(updated);
+    return res.json(serializePhoto(updated));
   } catch (err) {
     console.error('Failed to update metadata', err.message);
     res.status(500).json({ error: 'Failed to update' });

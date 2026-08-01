@@ -15,7 +15,7 @@ type AdminPhoto = {
   id: string;
   url: string;
   thumb?: string;
-  caption?: string;
+  location?: string;
   ord?: number;
   enabled?: boolean;
 };
@@ -1376,9 +1376,12 @@ const Admin = () => {
               sortedPhotos.map((photo, index) => (
                 <div key={photo.id} className="flex flex-col md:flex-row gap-4 p-4 rounded-2xl border border-border/60">
                   <div className="w-full md:w-40 h-28 bg-black/40 rounded-xl overflow-hidden">
-                    <img src={photo.thumb || photo.url} alt={photo.caption || 'Photo'} className="w-full h-full object-cover" />
+                    <img src={photo.thumb || photo.url} alt={photo.location || 'Photo'} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 space-y-3">
+                    {photo.location && (
+                      <p className="text-sm text-muted-foreground">Location: {photo.location}</p>
+                    )}
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <Switch

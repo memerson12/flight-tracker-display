@@ -16,15 +16,53 @@ db.exec(`
     filename TEXT NOT NULL,
     url TEXT NOT NULL,
     thumb TEXT,
-    caption TEXT,
+    latitude REAL,
+    longitude REAL,
+    location TEXT,
     ord INTEGER,
     enabled INTEGER DEFAULT 1,
     uploadedAt TEXT
   );
 `);
 
-const insertStmt = db.prepare(`INSERT INTO photos (id, filename, url, thumb, caption, ord, enabled, uploadedAt) VALUES (@id,@filename,@url,@thumb,@caption,@ord,@enabled,@uploadedAt)`);
-const updateStmt = db.prepare(`UPDATE photos SET filename=@filename, url=@url, thumb=@thumb, caption=@caption, ord=@ord, enabled=@enabled, uploadedAt=@uploadedAt WHERE id=@id`);
+const existingColumns = new Set(db.prepare('PRAGMA table_info(photos)').all().map((column) => column.name));
+const needsLocationMigration = existingColumns.has('caption')
+  || !existingColumns.has('latitude')
+  || !existingColumns.has('longitude')
+  || !existingColumns.has('location');
+
+if (needsLocationMigration) {
+  const columnOrNull = (name) => existingColumns.has(name) ? name : 'NULL';
+  const migratePhotos = db.transaction(() => {
+    db.exec('DROP TABLE IF EXISTS photos_migrated');
+    db.exec(`
+      CREATE TABLE photos_migrated (
+        id TEXT PRIMARY KEY,
+        filename TEXT NOT NULL,
+        url TEXT NOT NULL,
+        thumb TEXT,
+        latitude REAL,
+        longitude REAL,
+        location TEXT,
+        ord INTEGER,
+        enabled INTEGER DEFAULT 1,
+        uploadedAt TEXT
+      )
+    `);
+    db.exec(`
+      INSERT INTO photos_migrated (id, filename, url, thumb, latitude, longitude, location, ord, enabled, uploadedAt)
+      SELECT id, filename, url, thumb, ${columnOrNull('latitude')}, ${columnOrNull('longitude')},
+        ${columnOrNull('location')}, ord, enabled, uploadedAt
+      FROM photos
+    `);
+    db.exec('DROP TABLE photos');
+    db.exec('ALTER TABLE photos_migrated RENAME TO photos');
+  });
+  migratePhotos();
+}
+
+const insertStmt = db.prepare(`INSERT INTO photos (id, filename, url, thumb, latitude, longitude, location, ord, enabled, uploadedAt) VALUES (@id,@filename,@url,@thumb,@latitude,@longitude,@location,@ord,@enabled,@uploadedAt)`);
+const updateStmt = db.prepare(`UPDATE photos SET filename=@filename, url=@url, thumb=@thumb, latitude=@latitude, longitude=@longitude, location=@location, ord=@ord, enabled=@enabled, uploadedAt=@uploadedAt WHERE id=@id`);
 const deleteStmt = db.prepare(`DELETE FROM photos WHERE id = ?`);
 const selectAllStmt = db.prepare(`SELECT * FROM photos ORDER BY ord ASC`);
 const selectEnabledStmt = db.prepare(`SELECT * FROM photos WHERE enabled = 1 ORDER BY ord ASC`);
@@ -42,7 +80,9 @@ function add(item) {
     filename: meta.filename,
     url: meta.url,
     thumb: meta.thumb,
-    caption: meta.caption || '',
+    latitude: Number.isFinite(meta.latitude) ? meta.latitude : null,
+    longitude: Number.isFinite(meta.longitude) ? meta.longitude : null,
+    location: meta.location || null,
     ord: meta.order || meta.ord || Date.now(),
     enabled: meta.enabled ? 1 : 0,
     uploadedAt: meta.uploadedAt || new Date().toISOString()
@@ -63,7 +103,9 @@ function update(id, patch) {
     filename: next.filename,
     url: next.url,
     thumb: next.thumb,
-    caption: next.caption || '',
+    latitude: Number.isFinite(next.latitude) ? next.latitude : null,
+    longitude: Number.isFinite(next.longitude) ? next.longitude : null,
+    location: next.location || null,
     ord: next.order !== undefined ? next.order : next.ord,
     enabled: next.enabled ? 1 : 0,
     uploadedAt: next.uploadedAt || next.uploadedAt

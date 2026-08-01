@@ -124,21 +124,17 @@ export const samplePhotos = [
   {
     id: '1',
     src: 'https://images.unsplash.com/photo-1609220136736-443140cffec6?w=2560&q=80',
-    caption: 'Family gathering',
   },
   {
     id: '2',
     src: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=2560&q=80',
-    caption: 'Summer memories',
   },
   {
     id: '3',
     src: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=2560&q=80',
-    caption: 'Together',
   },
   {
     id: '4',
     src: 'https://images.unsplash.com/photo-1516733725897-1aa73b87c8e8?w=2560&q=80',
-    caption: 'Celebrations',
   },
 ];

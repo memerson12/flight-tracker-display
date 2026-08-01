@@ -25,7 +25,7 @@ type FlightResponse = {
 type PhotoApiItem = {
   id: string;
   url: string;
-  caption?: string;
+  location?: string;
 };
 
 type FlightLayers = {
@@ -170,7 +170,7 @@ const FlightDisplay = () => {
     (photoData ?? samplePhotos).map((photo) => ({
       id: photo.id,
       src: (photo as PhotoApiItem).url ?? (photo as Photo).src,
-      caption: photo.caption
+      location: photo.location
     }))
   ), [photoData]);
 
