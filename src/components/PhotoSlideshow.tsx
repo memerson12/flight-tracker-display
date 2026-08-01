@@ -179,12 +179,6 @@ const PhotoSlideshow = ({
 
   if (photos.length === 0) return <div className="w-full h-full bg-black" aria-hidden="true" />;
 
-  const currentIndex = activeLayer === 'A' ? layerAIndex : layerBIndex;
-  const hiddenIndex = activeLayer === 'A' ? layerBIndex : layerAIndex;
-  const indicatorIndex = isTransitioning ? hiddenIndex : currentIndex;
-  const indicatorPhoto = photos[indicatorIndex];
-  const indicatorIsPortrait = fitMode === 'contain' && orientations[indicatorPhoto?.id] === 'portrait';
-
   const handleTransitionEnd = () => {
     if (!isTransitioning || swapGuardRef.current) return;
     swapGuardRef.current = true;
@@ -228,21 +222,6 @@ const PhotoSlideshow = ({
         onLoad={rememberOrientation}
         onTransitionEnd={handleTransitionEnd}
       />
-
-      <div
-        className="absolute bottom-8 flex gap-2 transition-all duration-700"
-        style={indicatorIsPortrait
-          ? { left: clockCorner === 'right' ? '46%' : '54%', transform: `translate(-50%, 0) translate(${drift.x}px, ${drift.y}px)` }
-          : { [clockCorner]: '2rem', transform: `translate(${drift.x}px, ${drift.y}px)` }}
-      >
-        {photos.map((photo, index) => (
-          <div key={photo.id} className="w-6 h-2 flex items-center justify-center">
-            <div className={`h-2 rounded-full transition-[width,background-color] duration-500 ${
-              index === indicatorIndex ? 'bg-white/80 w-6' : 'bg-white/40 w-2'
-            }`} />
-          </div>
-        ))}
-      </div>
 
       <div
         className={`absolute top-8 ${clockCorner === 'right' ? 'right-8' : 'left-8'} transition-all duration-700`}
