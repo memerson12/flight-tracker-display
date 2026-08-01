@@ -1,5 +1,7 @@
 import { Flight } from '@/types/flight';
 
+export type DisplayScene = 'flights' | 'slideshow';
+
 /**
  * Refresh flight details without allowing provider result ordering to reshuffle
  * the display on every poll. Existing flights keep their current order and new
@@ -23,8 +25,22 @@ export const getNextFlightId = (flightIds: string[], currentId: string | null): 
   return flightIds[(currentIndex + 1) % flightIds.length];
 };
 
-export const getRemainingLingerMs = (
-  emptySince: number,
+export const getDesiredDisplayScene = (hasLiveFlights: boolean): DisplayScene => (
+  hasLiveFlights ? 'flights' : 'slideshow'
+);
+
+/**
+ * Returns null when the current scene already matches flight availability.
+ * Otherwise returns the time remaining before the scene may change. Applying
+ * the same delay in both directions prevents rapid flight/slideshow flicker.
+ */
+export const getSceneTransitionDelayMs = (
+  currentScene: DisplayScene,
+  hasLiveFlights: boolean,
+  sceneEnteredAt: number,
   now: number,
-  lingerMs: number
-): number => Math.max(0, lingerMs - (now - emptySince));
+  minimumDwellMs: number
+): number | null => {
+  if (currentScene === getDesiredDisplayScene(hasLiveFlights)) return null;
+  return Math.max(0, minimumDwellMs - (now - sceneEnteredAt));
+};

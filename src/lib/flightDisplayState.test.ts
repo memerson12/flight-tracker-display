@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { Flight } from '@/types/flight';
 import {
+  getDesiredDisplayScene,
   getNextFlightId,
-  getRemainingLingerMs,
+  getSceneTransitionDelayMs,
   mergeFlightSnapshots
 } from './flightDisplayState';
 
@@ -58,10 +59,24 @@ describe('getNextFlightId', () => {
   });
 });
 
-describe('getRemainingLingerMs', () => {
-  it('continues one grace period across repeated empty polls', () => {
-    expect(getRemainingLingerMs(1_000, 11_000, 45_000)).toBe(35_000);
-    expect(getRemainingLingerMs(1_000, 31_000, 45_000)).toBe(15_000);
-    expect(getRemainingLingerMs(1_000, 46_000, 45_000)).toBe(0);
+describe('display scene dwell time', () => {
+  it('derives the desired scene from current flight availability', () => {
+    expect(getDesiredDisplayScene(true)).toBe('flights');
+    expect(getDesiredDisplayScene(false)).toBe('slideshow');
+  });
+
+  it('holds the slideshow for the minimum time before showing flights', () => {
+    expect(getSceneTransitionDelayMs('slideshow', true, 1_000, 6_000, 15_000)).toBe(10_000);
+    expect(getSceneTransitionDelayMs('slideshow', true, 1_000, 16_000, 15_000)).toBe(0);
+  });
+
+  it('holds flights for the same minimum time before showing the slideshow', () => {
+    expect(getSceneTransitionDelayMs('flights', false, 1_000, 11_000, 15_000)).toBe(5_000);
+    expect(getSceneTransitionDelayMs('flights', false, 1_000, 20_000, 15_000)).toBe(0);
+  });
+
+  it('does not schedule a transition when the current scene is still desired', () => {
+    expect(getSceneTransitionDelayMs('slideshow', false, 1_000, 20_000, 15_000)).toBeNull();
+    expect(getSceneTransitionDelayMs('flights', true, 1_000, 20_000, 15_000)).toBeNull();
   });
 });

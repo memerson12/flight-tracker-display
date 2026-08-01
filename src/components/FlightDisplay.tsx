@@ -3,8 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 
 import { samplePhotos } from '@/data/sampleFlights';
 import {
+  type DisplayScene,
+  getDesiredDisplayScene,
   getNextFlightId,
-  getRemainingLingerMs,
+  getSceneTransitionDelayMs,
   mergeFlightSnapshots
 } from '@/lib/flightDisplayState';
 import { resolveTimeZone } from '@/lib/timeSettings';
@@ -36,7 +38,7 @@ type FlightLayers = {
 
 const EMPTY_FLIGHTS: Flight[] = [];
 const FLIGHT_ROTATION_MS = 15_000;
-const FLIGHT_LINGER_MS = 45_000;
+const MINIMUM_SCENE_DWELL_MS = 15_000;
 const FLIGHT_SWIPE_MS = 1100;
 
 const fetchFlights = async (): Promise<FlightResponse> => {
@@ -136,8 +138,8 @@ const FlightStage = ({ flight, isLingering }: { flight: Flight | null; isLingeri
 const FlightDisplay = () => {
   const [displayFlights, setDisplayFlights] = useState<Flight[]>([]);
   const [activeFlightId, setActiveFlightId] = useState<string | null>(null);
-  const [showFlightLayer, setShowFlightLayer] = useState(false);
-  const emptySinceRef = useRef<number | null>(null);
+  const [displayScene, setDisplayScene] = useState<DisplayScene>('slideshow');
+  const sceneEnteredAtRef = useRef(Date.now());
 
   const { data, isError } = useQuery({
     queryKey: ['flights'],
@@ -165,6 +167,7 @@ const FlightDisplay = () => {
 
   const liveFlights = isError ? EMPTY_FLIGHTS : (data?.flights ?? EMPTY_FLIGHTS);
   const hasLiveFlights = liveFlights.length > 0;
+  const showFlightLayer = displayScene === 'flights';
 
   const photos: Photo[] = useMemo(() => (
     (photoData ?? samplePhotos).map((photo) => ({
@@ -205,39 +208,40 @@ const FlightDisplay = () => {
   ]);
 
   useEffect(() => {
-    if (hasLiveFlights) {
-      emptySinceRef.current = null;
-      setDisplayFlights((previous) => mergeFlightSnapshots(previous, liveFlights));
-      setActiveFlightId((previousId) => (
-        previousId && liveFlights.some((flight) => flight.id === previousId)
-          ? previousId
-          : liveFlights[0].id
-      ));
-      setShowFlightLayer(true);
-      return;
-    }
+    if (!hasLiveFlights) return;
 
-    if (displayFlights.length === 0) {
-      emptySinceRef.current = null;
-      setShowFlightLayer(false);
-      return;
-    }
+    setDisplayFlights((previous) => mergeFlightSnapshots(previous, liveFlights));
+    setActiveFlightId((previousId) => (
+      previousId && liveFlights.some((flight) => flight.id === previousId)
+        ? previousId
+        : liveFlights[0].id
+    ));
+  }, [hasLiveFlights, liveFlights]);
 
-    if (emptySinceRef.current === null) {
-      emptySinceRef.current = Date.now();
-    }
-
-    const remainingLinger = getRemainingLingerMs(
-      emptySinceRef.current,
+  useEffect(() => {
+    const transitionDelay = getSceneTransitionDelayMs(
+      displayScene,
+      hasLiveFlights,
+      sceneEnteredAtRef.current,
       Date.now(),
-      FLIGHT_LINGER_MS
+      MINIMUM_SCENE_DWELL_MS
     );
-    const lingerTimer = window.setTimeout(() => {
-      setShowFlightLayer(false);
-    }, remainingLinger);
+    if (transitionDelay === null) return;
 
-    return () => window.clearTimeout(lingerTimer);
-  }, [displayFlights.length, hasLiveFlights, liveFlights]);
+    const desiredScene = getDesiredDisplayScene(hasLiveFlights);
+    const switchScene = () => {
+      sceneEnteredAtRef.current = Date.now();
+      setDisplayScene(desiredScene);
+    };
+
+    if (transitionDelay === 0) {
+      switchScene();
+      return;
+    }
+
+    const transitionTimer = window.setTimeout(switchScene, transitionDelay);
+    return () => window.clearTimeout(transitionTimer);
+  }, [displayScene, hasLiveFlights]);
 
   useEffect(() => {
     if (!showFlightLayer || rotatingFlightIdsRef.current.length < 2) return;
