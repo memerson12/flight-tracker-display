@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { formatClockDate, formatClockTime } from '@/lib/timeSettings';
 import { Photo } from '@/types/flight';
@@ -224,32 +224,78 @@ const PhotoSlideshow = ({
       />
 
       <div
-        className={`absolute top-8 ${clockCorner === 'right' ? 'right-8' : 'left-8'} mix-blend-difference transition-all duration-700`}
-        style={{ transform: `translate(${drift.x}px, ${drift.y}px)` }}
+        className={`absolute top-8 ${clockCorner === 'right' ? 'right-8' : 'left-8'} transition-all duration-700`}
       >
-        <Clock align={clockCorner} settings={clock} />
+        <Clock align={clockCorner} settings={clock} drift={drift} />
       </div>
     </div>
   );
 };
 
-const Clock = ({ align, settings }: { align: Corner; settings: ClockSettings }) => {
+const Clock = ({
+  align,
+  settings,
+  drift
+}: {
+  align: Corner;
+  settings: ClockSettings;
+  drift: { x: number; y: number };
+}) => {
   const [time, setTime] = useState(new Date());
+  const clipId = `adaptive-clock-${useId().replace(/:/g, '')}`;
 
   useEffect(() => {
     const timer = window.setInterval(() => setTime(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
+  const clockTime = formatClockTime(time, settings).toUpperCase();
+  const clockDate = formatClockDate(time, settings);
+  const textAnchor = align === 'right' ? 'end' : 'start';
+  const textX = align === 'right' ? 260 : 0;
+
   return (
-    <div className={`${align === 'right' ? 'text-right' : 'text-left'} text-white select-none`}>
-      <div className="font-mono text-5xl font-light tracking-wider uppercase">
-        {formatClockTime(time, settings)}
-      </div>
-      <div className="text-lg text-white/70 mt-1">
-        {formatClockDate(time, settings)}
-      </div>
-    </div>
+    <>
+      <svg width="0" height="0" className="absolute" aria-hidden="true">
+        <defs>
+          <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
+            <text
+              x={textX}
+              y="46"
+              textAnchor={textAnchor}
+              fontFamily="JetBrains Mono, monospace"
+              fontSize="48"
+              fontWeight="300"
+              letterSpacing="0.05em"
+            >
+              {clockTime}
+            </text>
+            <text
+              x={textX}
+              y="75"
+              textAnchor={textAnchor}
+              fontFamily="Inter, system-ui, sans-serif"
+              fontSize="18"
+              fontWeight="400"
+            >
+              {clockDate}
+            </text>
+          </clipPath>
+        </defs>
+      </svg>
+      <div
+        className="h-[82px] w-[260px] select-none bg-white transition-transform duration-700"
+        role="timer"
+        aria-label={`${clockTime}, ${clockDate}`}
+        style={{
+          clipPath: `url(#${clipId})`,
+          mixBlendMode: 'difference',
+          backdropFilter: 'grayscale(1) contrast(100)',
+          WebkitBackdropFilter: 'grayscale(1) contrast(100)',
+          transform: `translate(${drift.x}px, ${drift.y}px)`
+        }}
+      />
+    </>
   );
 };
 
