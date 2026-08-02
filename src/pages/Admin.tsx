@@ -1092,17 +1092,51 @@ const Admin = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-[0.7fr_1.3fr] gap-6 border-t border-border/60 pt-6">
-            <div className="flex items-center justify-between gap-6">
-              <div>
-                <p className="text-sm text-muted-foreground">Clock format</p>
-                <p className="text-lg">{clockUse24Hour ? '24-hour time' : '12-hour time'}</p>
+            <fieldset className="space-y-2">
+              <legend className="text-sm text-muted-foreground">Clock format</legend>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Clock format">
+                <label
+                  className={`flex min-h-14 cursor-pointer flex-col justify-center rounded-md border px-4 transition-colors ${
+                    !clockUse24Hour
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background hover:bg-accent'
+                  }`}
+                >
+                  <input
+                    className="sr-only"
+                    type="radio"
+                    name="clock-format"
+                    value="12"
+                    checked={!clockUse24Hour}
+                    onChange={() => setClockUse24Hour(false)}
+                  />
+                  <span className="font-medium">12-hour</span>
+                  <span className={`text-xs ${!clockUse24Hour ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>
+                    10:05 pm
+                  </span>
+                </label>
+                <label
+                  className={`flex min-h-14 cursor-pointer flex-col justify-center rounded-md border px-4 transition-colors ${
+                    clockUse24Hour
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background hover:bg-accent'
+                  }`}
+                >
+                  <input
+                    className="sr-only"
+                    type="radio"
+                    name="clock-format"
+                    value="24"
+                    checked={clockUse24Hour}
+                    onChange={() => setClockUse24Hour(true)}
+                  />
+                  <span className="font-medium">24-hour</span>
+                  <span className={`text-xs ${clockUse24Hour ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>
+                    22:05
+                  </span>
+                </label>
               </div>
-              <Switch
-                aria-label="Use 24-hour time"
-                checked={clockUse24Hour}
-                onCheckedChange={setClockUse24Hour}
-              />
-            </div>
+            </fieldset>
 
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Display time zone</label>
