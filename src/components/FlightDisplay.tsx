@@ -11,6 +11,7 @@ import {
   mergeFlightSnapshots,
   reconcileFlightAvailability
 } from '@/lib/flightDisplayState';
+import { getScheduledBrightness } from '@/lib/displayBrightness';
 import { resolveTimeZone } from '@/lib/timeSettings';
 import { normalizeEpochMilliseconds } from '@/lib/windowPosition';
 import { Flight, Photo } from '@/types/flight';
@@ -150,6 +151,7 @@ const FlightDisplay = () => {
   const [activeFlightId, setActiveFlightId] = useState<string | null>(null);
   const [displayScene, setDisplayScene] = useState<DisplayScene>('slideshow');
   const [hasConfirmedFlights, setHasConfirmedFlights] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState(() => Date.now());
   const sceneEnteredAtRef = useRef(Date.now());
   const availabilityRef = useRef<FlightAvailabilityState>({
     hasFlights: false,
@@ -221,6 +223,16 @@ const FlightDisplay = () => {
     settingsData?.windowPosition?.latitude,
     settingsData?.windowPosition?.longitude
   ]);
+  const displayBrightness = getScheduledBrightness(
+    new Date(scheduleTime),
+    settingsData?.display,
+    clockSettings.timeZone
+  );
+
+  useEffect(() => {
+    const scheduleTimer = window.setInterval(() => setScheduleTime(Date.now()), 15_000);
+    return () => window.clearInterval(scheduleTimer);
+  }, []);
 
   useEffect(() => {
     if (isError || !data) return;
@@ -335,6 +347,12 @@ const FlightDisplay = () => {
           </div>
         )}
       </section>
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[1000] bg-black transition-opacity duration-1000 ease-in-out"
+        style={{ opacity: (100 - displayBrightness) / 100 }}
+      />
     </main>
   );
 };

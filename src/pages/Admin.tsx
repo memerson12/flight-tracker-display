@@ -7,6 +7,7 @@ import { CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
 import { toast } from '@/components/ui/sonner';
 import { Switch } from '@/components/ui/switch';
 import { buildMapboxGeocodingUrl } from '@/lib/mapboxGeocoding';
@@ -174,6 +175,11 @@ const Admin = () => {
   const [slideshowFit, setSlideshowFit] = useState<'cover' | 'contain'>('cover');
   const [clockUse24Hour, setClockUse24Hour] = useState(true);
   const [clockTimeZone, setClockTimeZone] = useState('');
+  const [displayBrightness, setDisplayBrightness] = useState(100);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState('22:00');
+  const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
+  const [quietHoursBrightness, setQuietHoursBrightness] = useState(0);
   const [windowPositionEnabled, setWindowPositionEnabled] = useState(false);
   const [observerAddress, setObserverAddress] = useState('');
   const [observerLatitude, setObserverLatitude] = useState('');
@@ -325,6 +331,11 @@ const Admin = () => {
       settingsData?.windowPosition?.latitude,
       settingsData?.windowPosition?.longitude
     ));
+    setDisplayBrightness(settingsData?.display?.brightness ?? 100);
+    setQuietHoursEnabled(settingsData?.display?.quietHours?.enabled ?? false);
+    setQuietHoursStart(settingsData?.display?.quietHours?.start ?? '22:00');
+    setQuietHoursEnd(settingsData?.display?.quietHours?.end ?? '07:00');
+    setQuietHoursBrightness(settingsData?.display?.quietHours?.brightness ?? 0);
   }, [settingsData]);
 
   useEffect(() => {
@@ -758,6 +769,9 @@ const Admin = () => {
     if (!isValidTimeZone(clockTimeZone)) {
       return 'Enter a valid IANA time zone, such as Australia/Brisbane.';
     }
+    if (quietHoursEnabled && quietHoursStart === quietHoursEnd) {
+      return 'Quiet hours must have different start and end times.';
+    }
     return null;
   };
 
@@ -802,6 +816,15 @@ const Admin = () => {
         clock: {
           use24Hour: clockUse24Hour,
           timeZone: clockTimeZone
+        },
+        display: {
+          brightness: displayBrightness,
+          quietHours: {
+            enabled: quietHoursEnabled,
+            start: quietHoursStart,
+            end: quietHoursEnd,
+            brightness: quietHoursBrightness
+          }
         }
       })
     });
@@ -1056,15 +1079,101 @@ const Admin = () => {
         </header>
 
         <section className="card-glass rounded-3xl p-8 space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold">Slideshow Settings</h2>
-            <Button onClick={handleSaveSettings} disabled={settingsSaving || locationSetupSaving}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold">Display Settings</h2>
+              <p className="text-muted-foreground mt-1">Control brightness, quiet hours, photos, and the clock.</p>
+            </div>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={handleSaveSettings}
+              disabled={settingsSaving || locationSetupSaving}
+            >
               {settingsSaving ? 'Saving...' : 'Save settings'}
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="space-y-3 rounded-xl border border-border/60 bg-background/35 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium">Normal brightness</p>
+                  <p className="text-sm text-muted-foreground">Used outside quiet hours</p>
+                </div>
+                <output className="min-w-12 text-right font-mono text-sm text-primary">
+                  {displayBrightness === 0 ? 'Off' : `${displayBrightness}%`}
+                </output>
+              </div>
+              <Slider
+                aria-label="Normal brightness"
+                min={0}
+                max={100}
+                step={5}
+                value={[displayBrightness]}
+                onValueChange={([value]) => setDisplayBrightness(value)}
+              />
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-border/60 bg-background/35 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium">Quiet hours</p>
+                  <p className="text-sm text-muted-foreground">Automatically dim the OLED on a daily schedule</p>
+                </div>
+                <Switch
+                  aria-label="Enable quiet hours"
+                  checked={quietHoursEnabled}
+                  onCheckedChange={setQuietHoursEnabled}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="space-y-2 text-sm text-muted-foreground">
+                  Starts
+                  <Input
+                    type="time"
+                    value={quietHoursStart}
+                    disabled={!quietHoursEnabled}
+                    onChange={(event) => setQuietHoursStart(event.target.value)}
+                  />
+                </label>
+                <label className="space-y-2 text-sm text-muted-foreground">
+                  Ends
+                  <Input
+                    type="time"
+                    value={quietHoursEnd}
+                    disabled={!quietHoursEnabled}
+                    onChange={(event) => setQuietHoursEnd(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <span className="text-muted-foreground">Quiet-hours brightness</span>
+                  <output className="min-w-12 text-right font-mono text-primary">
+                    {quietHoursBrightness === 0 ? 'Off' : `${quietHoursBrightness}%`}
+                  </output>
+                </div>
+                <Slider
+                  aria-label="Quiet-hours brightness"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={[quietHoursBrightness]}
+                  disabled={!quietHoursEnabled}
+                  onValueChange={([value]) => setQuietHoursBrightness(value)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Uses the display time zone below. Off renders true black on the OLED.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-border/60 pt-6">
             <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">Interval (ms)</label>
+              <label className="text-sm text-muted-foreground">Photo interval (ms)</label>
               <Input
                 type="number"
                 value={slideshowInterval}

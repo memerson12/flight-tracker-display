@@ -18,6 +18,16 @@ const defaultClockSettings = {
   timeZone: ''
 };
 
+const defaultDisplaySettings = {
+  brightness: 100,
+  quietHours: {
+    enabled: false,
+    start: '22:00',
+    end: '07:00',
+    brightness: 0
+  }
+};
+
 const finiteOrNull = (value, minimum, maximum) => {
   if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
@@ -59,10 +69,48 @@ const normalizeClockSettings = (input = {}, existing = {}) => {
   };
 };
 
+const clampPercentage = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(100, Math.max(0, Math.round(parsed))) : fallback;
+};
+
+const normalizeTime = (value, fallback) => {
+  const time = String(value || '').trim();
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : fallback;
+};
+
+const normalizeDisplaySettings = (input = {}, existing = {}) => {
+  const existingQuietHours = existing.quietHours || {};
+  const inputQuietHours = input.quietHours || {};
+  const quietHours = {
+    ...defaultDisplaySettings.quietHours,
+    ...existingQuietHours,
+    ...inputQuietHours
+  };
+
+  return {
+    brightness: clampPercentage(
+      input.brightness ?? existing.brightness,
+      defaultDisplaySettings.brightness
+    ),
+    quietHours: {
+      enabled: Boolean(quietHours.enabled),
+      start: normalizeTime(quietHours.start, defaultDisplaySettings.quietHours.start),
+      end: normalizeTime(quietHours.end, defaultDisplaySettings.quietHours.end),
+      brightness: clampPercentage(
+        quietHours.brightness,
+        defaultDisplaySettings.quietHours.brightness
+      )
+    }
+  };
+};
+
 module.exports = {
   defaultClockSettings,
+  defaultDisplaySettings,
   defaultSlideshowSettings,
   defaultWindowPositionSettings,
   normalizeClockSettings,
+  normalizeDisplaySettings,
   normalizeWindowPositionSettings
 };

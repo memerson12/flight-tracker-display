@@ -1,7 +1,11 @@
 const assert = require('assert');
 const test = require('node:test');
 
-const { normalizeClockSettings, normalizeWindowPositionSettings } = require('../lib/displaySettings');
+const {
+  normalizeClockSettings,
+  normalizeDisplaySettings,
+  normalizeWindowPositionSettings
+} = require('../lib/displaySettings');
 
 test('preserves saved observer details while toggling the indicator off', () => {
     const existing = {
@@ -51,4 +55,41 @@ test('normalizes display clock preferences', () => {
   });
 
   assert.strictEqual(normalizeClockSettings({ timeZone: 'Not/A_Time_Zone' }).timeZone, '');
+});
+
+test('normalizes brightness and quiet hours', () => {
+  assert.deepStrictEqual(normalizeDisplaySettings({
+    brightness: 85.4,
+    quietHours: {
+      enabled: true,
+      start: '21:30',
+      end: '06:45',
+      brightness: 5
+    }
+  }), {
+    brightness: 85,
+    quietHours: {
+      enabled: true,
+      start: '21:30',
+      end: '06:45',
+      brightness: 5
+    }
+  });
+});
+
+test('clamps brightness and replaces invalid quiet-hour times', () => {
+  const normalized = normalizeDisplaySettings({
+    brightness: 150,
+    quietHours: {
+      enabled: true,
+      start: '25:00',
+      end: 'not-a-time',
+      brightness: -20
+    }
+  });
+
+  assert.strictEqual(normalized.brightness, 100);
+  assert.strictEqual(normalized.quietHours.start, '22:00');
+  assert.strictEqual(normalized.quietHours.end, '07:00');
+  assert.strictEqual(normalized.quietHours.brightness, 0);
 });

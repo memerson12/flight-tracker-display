@@ -8,8 +8,10 @@ const { normalizeFlightData } = require('./lib/flightNormalizer');
 const adminAuth = require('./middleware/adminAuth');
 const {
     defaultClockSettings,
+    defaultDisplaySettings,
     defaultSlideshowSettings,
     normalizeClockSettings,
+    normalizeDisplaySettings,
     normalizeWindowPositionSettings
 } = require('./lib/displaySettings');
 
@@ -32,6 +34,7 @@ function loadConfig() {
         }
         config.windowPosition = normalizeWindowPositionSettings(config.windowPosition);
         config.clock = normalizeClockSettings(config.clock);
+        config.display = normalizeDisplaySettings(config.display);
         
         // Determine provider (config.json takes precedence over env var)
         const provider = config.provider || process.env.FLIGHT_PROVIDER || 'flightradar24';
@@ -149,7 +152,8 @@ app.get('/api/settings', (req, res) => {
     const slideshow = { ...defaultSlideshowSettings, ...(config.slideshow || {}) };
     const windowPosition = normalizeWindowPositionSettings(config.windowPosition);
     const clock = normalizeClockSettings(config.clock);
-    return res.json({ slideshow, windowPosition, clock });
+    const display = normalizeDisplaySettings(config.display);
+    return res.json({ slideshow, windowPosition, clock, display });
 });
 
 app.put('/api/settings', adminAuth, (req, res) => {
@@ -178,10 +182,14 @@ app.put('/api/settings', adminAuth, (req, res) => {
             ? normalizeClockSettings(req.body.clock, next.clock)
             : normalizeClockSettings(next.clock || defaultClockSettings);
 
+        next.display = req.body?.display
+            ? normalizeDisplaySettings(req.body.display, next.display)
+            : normalizeDisplaySettings(next.display || defaultDisplaySettings);
+
         persistConfig(next);
         reloadConfig(next);
 
-        return res.json({ slideshow: next.slideshow, windowPosition: next.windowPosition, clock: next.clock });
+        return res.json({ slideshow: next.slideshow, windowPosition: next.windowPosition, clock: next.clock, display: next.display });
     } catch (error) {
         console.error('Failed to update settings:', error.message);
         return res.status(500).json({ error: 'Failed to update settings' });

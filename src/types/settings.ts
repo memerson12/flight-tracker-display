@@ -18,8 +18,19 @@ export type ClockSettings = {
   timeZone?: string;
 };
 
+export type DisplaySettings = {
+  brightness?: number;
+  quietHours?: {
+    enabled?: boolean;
+    start?: string;
+    end?: string;
+    brightness?: number;
+  };
+};
+
 export type SettingsResponse = {
   slideshow?: SlideshowSettings;
   windowPosition?: WindowPositionSettings;
   clock?: ClockSettings;
+  display?: DisplaySettings;
 };
