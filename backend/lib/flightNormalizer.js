@@ -5,20 +5,24 @@ const { resolveAirlineIdentity } = require('./airlineIdentity');
 const unknownAirlineWarnings = new Set();
 
 function toNumber(value, fallback = 0) {
+  if (value === null || value === undefined || value === '') return fallback;
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }
 
 function metersToFeet(value) {
-  return Math.round(toNumber(value) * FEET_PER_METER);
+  const number = toNumber(value, null);
+  return number === null ? null : Math.round(number * FEET_PER_METER);
 }
 
 function mpsToKnots(value) {
-  return Math.round(toNumber(value) * KNOTS_PER_MPS);
+  const number = toNumber(value, null);
+  return number === null ? null : Math.round(number * KNOTS_PER_MPS);
 }
 
 function mpsToFpm(value) {
-  return Math.round(toNumber(value) * FPM_PER_MPS);
+  const number = toNumber(value, null);
+  return number === null ? null : Math.round(number * FPM_PER_MPS);
 }
 
 function normalizeAirport(code) {
@@ -34,12 +38,12 @@ function normalizeAirport(code) {
 function resolveStatus({ onGround, verticalSpeed, altitude }) {
   if (onGround) return 'landed';
 
-  const vs = toNumber(verticalSpeed, 0);
-  const alt = toNumber(altitude, 0);
+  const vs = toNumber(verticalSpeed, null);
+  const alt = toNumber(altitude, null);
 
-  if (alt < 3000 && vs < -200) return 'approaching';
-  if (vs > 300) return 'climbing';
-  if (vs < -300) return 'descending';
+  if (alt !== null && vs !== null && alt < 3000 && vs < -200) return 'approaching';
+  if (vs !== null && vs > 300) return 'climbing';
+  if (vs !== null && vs < -300) return 'descending';
   return 'cruising';
 }
 
@@ -53,7 +57,8 @@ function normalizeFlight(rawFlight) {
   const altitudeFeet = metersToFeet(rawFlight.altitude);
   const speedKnots = mpsToKnots(rawFlight.velocity);
   const verticalFpm = mpsToFpm(rawFlight.verticalRate);
-  const heading = Math.round(toNumber(rawFlight.heading, 0));
+  const rawHeading = toNumber(rawFlight.heading, null);
+  const heading = rawHeading === null ? null : Math.round(rawHeading);
 
   const airline = resolveAirlineIdentity({
     operatorIcao: rawFlight.operatorIcao,

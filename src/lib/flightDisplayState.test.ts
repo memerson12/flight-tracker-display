@@ -114,12 +114,12 @@ describe('flight availability confirmation', () => {
     )).toEqual({ hasFlights: false, consecutiveEmptyPolls: 3 });
   });
 
-  it('allows the final displayed flight to leave without extra empty-poll delay', () => {
+  it('protects a single displayed flight from one transient empty poll', () => {
     expect(reconcileFlightAvailability(
       { hasFlights: true, consecutiveEmptyPolls: 0 },
       0,
       1,
       3
-    )).toEqual({ hasFlights: false, consecutiveEmptyPolls: 0 });
+    )).toEqual({ hasFlights: true, consecutiveEmptyPolls: 1 });
   });
 });

@@ -24,9 +24,14 @@ const hasUsefulAirportCode = (code?: string) => (
 
 const getDisplayStatus = (flight: Flight, isLingering: boolean) => {
   if (isLingering) return 'LEAVING AREA';
+  if (flight.status === 'landed') return 'ON GROUND';
   if (flight.status === 'approaching') return 'APPROACHING';
-  return 'OVERHEAD NOW';
+  if (flight.status === 'climbing') return 'CLIMBING';
+  if (flight.status === 'descending') return 'DESCENDING';
+  return 'CRUISING';
 };
+
+const formatMetric = (value: number | null) => value === null ? '—' : value.toLocaleString();
 
 const MetricCard = ({ accent, icon, label, value, unit }: MetricCardProps) => (
   <div
@@ -76,9 +81,9 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
     boxShadow: `0 0 54px -18px ${accent}88, 0 0 96px -30px ${accent}55`
   };
 
-  const verticalIcon = flight.position.verticalSpeed > 100
+  const verticalIcon = flight.position.verticalSpeed !== null && flight.position.verticalSpeed > 100
     ? <ArrowUp className="w-5 h-5 text-aviation-green" />
-    : flight.position.verticalSpeed < -100
+    : flight.position.verticalSpeed !== null && flight.position.verticalSpeed < -100
       ? <ArrowDown className="w-5 h-5 text-aviation-amber" />
       : <Minus className="w-5 h-5 text-muted-foreground" />;
 
@@ -209,28 +214,33 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
             accent={accent}
             icon={<Mountain className="w-5 h-5" style={{ color: accent }} />}
             label="Altitude"
-            value={flight.position.altitude.toLocaleString()}
+            value={formatMetric(flight.position.altitude)}
             unit="ft"
           />
           <MetricCard
             accent={accent}
             icon={<Gauge className="w-5 h-5" style={{ color: accent }} />}
             label="Speed"
-            value={flight.position.speed.toLocaleString()}
+            value={formatMetric(flight.position.speed)}
             unit="kts"
           />
           <MetricCard
             accent={accent}
             icon={verticalIcon}
             label="Vertical speed"
-            value={`${flight.position.verticalSpeed > 0 ? '+' : ''}${flight.position.verticalSpeed.toLocaleString()}`}
+            value={flight.position.verticalSpeed === null
+              ? '—'
+              : `${flight.position.verticalSpeed > 0 ? '+' : ''}${flight.position.verticalSpeed.toLocaleString()}`}
             unit="fpm"
           />
           <MetricCard
             accent={accent}
-            icon={<Plane className="w-5 h-5" style={{ color: accent, transform: `rotate(${flight.position.heading}deg)` }} />}
+            icon={<Plane className="w-5 h-5" style={{
+              color: accent,
+              transform: flight.position.heading === null ? undefined : `rotate(${flight.position.heading}deg)`
+            }} />}
             label="Heading"
-            value={Math.round(flight.position.heading).toString()}
+            value={flight.position.heading === null ? '—' : Math.round(flight.position.heading).toString()}
             unit="deg"
           />
         </div>

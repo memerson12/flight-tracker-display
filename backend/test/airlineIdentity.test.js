@@ -146,3 +146,18 @@ describe('normalized flight airline contract', function() {
     });
   });
 });
+
+describe('normalized flight telemetry contract', function() {
+  it('preserves missing telemetry as unknown instead of manufacturing zeroes', function() {
+    const flight = normalizeFlight({
+      id: 'missing-telemetry',
+      latitude: 1,
+      longitude: 1
+    });
+
+    assert.strictEqual(flight.position.altitude, null);
+    assert.strictEqual(flight.position.speed, null);
+    assert.strictEqual(flight.position.verticalSpeed, null);
+    assert.strictEqual(flight.position.heading, null);
+  });
+});

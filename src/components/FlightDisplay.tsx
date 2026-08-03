@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { type QueryFunctionContext, useQuery } from '@tanstack/react-query';
 
-import { samplePhotos } from '@/data/sampleFlights';
+import { flightResponseSchema } from '@/lib/apiSchemas';
 import {
   type DisplayScene,
   type FlightAvailabilityState,
@@ -44,33 +44,52 @@ const FLIGHT_ROTATION_MS = 15_000;
 const MINIMUM_SCENE_DWELL_MS = 15_000;
 const SUSPICIOUS_EMPTY_POLLS_REQUIRED = 3;
 const FLIGHT_SWIPE_MS = 1100;
+const REQUEST_TIMEOUT_MS = 12_000;
+const FAILED_DATA_EXPIRY_MS = 120_000;
 
-const fetchFlights = async (): Promise<FlightResponse> => {
-  const response = await fetch('/api/flights/overhead');
+const fetchWithTimeout = async (url: string, signal?: AbortSignal) => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+    signal?.removeEventListener('abort', abort);
+  }
+};
+
+const fetchFlights = async ({ signal }: QueryFunctionContext): Promise<FlightResponse> => {
+  const response = await fetchWithTimeout('/api/flights/overhead', signal);
   if (!response.ok) {
     throw new Error('Failed to load flights');
   }
-  const payload = await response.json() as FlightResponse;
+  const payload = flightResponseSchema.parse(await response.json()) as FlightResponse;
   const observedAt = normalizeEpochMilliseconds(payload.timestamp) ?? Date.now();
   return {
     ...payload,
     flights: (payload.flights || []).map((flight) => ({
       ...flight,
-      position: { ...flight.position, observedAt }
+      position: {
+        ...flight.position,
+        observedAt: normalizeEpochMilliseconds(flight.position.observedAt) ?? observedAt
+      }
     }))
   };
 };
 
-const fetchPhotos = async (): Promise<PhotoApiItem[]> => {
-  const response = await fetch('/api/photos');
+const fetchPhotos = async ({ signal }: QueryFunctionContext): Promise<PhotoApiItem[]> => {
+  const response = await fetchWithTimeout('/api/photos', signal);
   if (!response.ok) {
     throw new Error('Failed to load photos');
   }
   return response.json();
 };
 
-const fetchSettings = async (): Promise<SettingsResponse> => {
-  const response = await fetch('/api/settings');
+const fetchSettings = async ({ signal }: QueryFunctionContext): Promise<SettingsResponse> => {
+  const response = await fetchWithTimeout('/api/settings', signal);
   if (!response.ok) {
     throw new Error('Failed to load settings');
   }
@@ -153,12 +172,13 @@ const FlightDisplay = () => {
   const [hasConfirmedFlights, setHasConfirmedFlights] = useState(false);
   const [scheduleTime, setScheduleTime] = useState(() => Date.now());
   const sceneEnteredAtRef = useRef(Date.now());
+  const initialSceneResolvedRef = useRef(false);
   const availabilityRef = useRef<FlightAvailabilityState>({
     hasFlights: false,
     consecutiveEmptyPolls: 0
   });
 
-  const { data, isError } = useQuery({
+  const { data, dataUpdatedAt, isError, isRefetchError } = useQuery({
     queryKey: ['flights'],
     queryFn: fetchFlights,
     refetchInterval: (query) => {
@@ -168,14 +188,14 @@ const FlightDisplay = () => {
     refetchIntervalInBackground: true
   });
 
-  const { data: photoData } = useQuery({
+  const { data: photoData, isError: isPhotoError } = useQuery({
     queryKey: ['photos'],
     queryFn: fetchPhotos,
     refetchInterval: 60000,
     refetchIntervalInBackground: true
   });
 
-  const { data: settingsData } = useQuery({
+  const { data: settingsData, isError: isSettingsError } = useQuery({
     queryKey: ['settings'],
     queryFn: fetchSettings,
     refetchInterval: 10000,
@@ -185,14 +205,30 @@ const FlightDisplay = () => {
   const liveFlights = data?.flights ?? EMPTY_FLIGHTS;
   const hasLiveFlights = liveFlights.length > 0;
   const showFlightLayer = displayScene === 'flights';
+  const hasFlightQueryError = isError || isRefetchError;
+  const flightDataAgeMs = dataUpdatedAt > 0 ? Math.max(0, scheduleTime - dataUpdatedAt) : null;
+  const flightDataExpired = hasFlightQueryError
+    && flightDataAgeMs !== null
+    && flightDataAgeMs >= FAILED_DATA_EXPIRY_MS;
 
   const photos: Photo[] = useMemo(() => (
-    (photoData ?? samplePhotos).map((photo) => ({
+    (photoData ?? []).map((photo) => ({
       id: photo.id,
-      src: (photo as PhotoApiItem).url ?? (photo as Photo).src,
+      src: photo.url,
       location: photo.location
     }))
   ), [photoData]);
+
+  const healthMessage = useMemo(() => {
+    if (hasFlightQueryError) {
+      if (flightDataExpired || flightDataAgeMs === null) return 'FLIGHT DATA OFFLINE';
+      const ageSeconds = Math.max(1, Math.round(flightDataAgeMs / 1000));
+      return `FLIGHT DATA STALE · ${ageSeconds}s`;
+    }
+    if (isPhotoError && !hasConfirmedFlights) return 'PHOTO LIBRARY OFFLINE';
+    if (isSettingsError) return 'DISPLAY SETTINGS OFFLINE';
+    return null;
+  }, [flightDataAgeMs, flightDataExpired, hasConfirmedFlights, hasFlightQueryError, isPhotoError, isSettingsError]);
 
   const flightIds = useMemo(
     () => displayFlights.map((flight) => flight.id),
@@ -235,7 +271,7 @@ const FlightDisplay = () => {
   }, []);
 
   useEffect(() => {
-    if (isError || !data) return;
+    if (hasFlightQueryError || !data) return;
 
     const nextAvailability = reconcileFlightAvailability(
       availabilityRef.current,
@@ -246,6 +282,12 @@ const FlightDisplay = () => {
     availabilityRef.current = nextAvailability;
     setHasConfirmedFlights(nextAvailability.hasFlights);
 
+    if (!initialSceneResolvedRef.current) {
+      initialSceneResolvedRef.current = true;
+      sceneEnteredAtRef.current = Date.now();
+      setDisplayScene(getDesiredDisplayScene(nextAvailability.hasFlights));
+    }
+
     if (!hasLiveFlights) return;
     setDisplayFlights((previous) => mergeFlightSnapshots(previous, liveFlights));
     setActiveFlightId((previousId) => (
@@ -253,9 +295,16 @@ const FlightDisplay = () => {
         ? previousId
         : liveFlights[0].id
     ));
-  }, [data, displayFlights.length, hasLiveFlights, isError, liveFlights]);
+  }, [data, displayFlights.length, hasFlightQueryError, hasLiveFlights, liveFlights]);
 
   useEffect(() => {
+    if (!flightDataExpired || !availabilityRef.current.hasFlights) return;
+    availabilityRef.current = { hasFlights: false, consecutiveEmptyPolls: 0 };
+    setHasConfirmedFlights(false);
+  }, [flightDataExpired]);
+
+  useEffect(() => {
+    if (!initialSceneResolvedRef.current) return;
     const transitionDelay = getSceneTransitionDelayMs(
       displayScene,
       hasConfirmedFlights,
@@ -347,6 +396,15 @@ const FlightDisplay = () => {
           </div>
         )}
       </section>
+
+      {healthMessage && (
+        <div
+          role="status"
+          className="absolute bottom-5 right-5 z-[900] rounded-full border border-white/20 bg-black/80 px-4 py-2 font-mono text-xs tracking-[0.16em] text-white/70"
+        >
+          {healthMessage}
+        </div>
+      )}
 
       <div
         aria-hidden="true"

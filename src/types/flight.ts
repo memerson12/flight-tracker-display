@@ -30,10 +30,10 @@ export interface Flight {
     time?: string;
   };
   position: {
-    altitude: number; // feet
-    speed: number; // knots
-    heading: number; // degrees
-    verticalSpeed: number; // feet per minute
+    altitude: number | null; // feet
+    speed: number | null; // knots
+    heading: number | null; // degrees
+    verticalSpeed: number | null; // feet per minute
     latitude: number;
     longitude: number;
     observedAt?: number;

@@ -42,14 +42,14 @@ export const getDesiredDisplayScene = (hasLiveFlights: boolean): DisplayScene =>
 export const reconcileFlightAvailability = (
   previous: FlightAvailabilityState,
   liveFlightCount: number,
-  retainedFlightCount: number,
+  _retainedFlightCount: number,
   emptyPollsRequired: number
 ): FlightAvailabilityState => {
   if (liveFlightCount > 0) {
     return { hasFlights: true, consecutiveEmptyPolls: 0 };
   }
 
-  if (!previous.hasFlights || retainedFlightCount <= 1) {
+  if (!previous.hasFlights) {
     return { hasFlights: false, consecutiveEmptyPolls: 0 };
   }
 
