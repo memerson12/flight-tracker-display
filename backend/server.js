@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const { createFlightAdapter, validateProviderConfig } = require('./adapters');
 const { normalizeFlightData } = require('./lib/flightNormalizer');
 const { withObserverBearings } = require('./lib/observerBearing');
+const { writeJsonAtomic } = require('./lib/atomicJsonStore');
 const adminAuth = require('./middleware/adminAuth');
 const {
     defaultClockSettings,
@@ -71,7 +72,7 @@ function loadConfig() {
 }
 
 function persistConfig(nextConfig) {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(nextConfig, null, 2));
+    writeJsonAtomic(CONFIG_PATH, nextConfig);
 }
 
 function reloadConfig(nextConfig) {
