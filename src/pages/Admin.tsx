@@ -292,7 +292,7 @@ const Admin = () => {
   });
 
   const { data: settingsData, refetch: refetchSettings } = useQuery({
-    queryKey: ['admin-settings'],
+    queryKey: ['admin-settings', token],
     queryFn: async () => {
       const response = await fetch('/api/admin/settings', { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to load settings');
@@ -444,7 +444,7 @@ const Admin = () => {
   }, [locationMode, mapboxToken, searchQuery, trackingSearchResolved]);
 
   useEffect(() => {
-    if (locationMode !== 'rectangle') return;
+    if (!token || locationMode !== 'rectangle') return;
     if (!mapboxToken) {
       setMapError('Missing Mapbox token. Set VITE_MAPBOX_TOKEN in .env.');
       return;
@@ -607,7 +607,7 @@ const Admin = () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [locationMode, mapboxToken]);
+  }, [locationMode, mapboxToken, token]);
 
   useEffect(() => {
     const map = mapRef.current;
