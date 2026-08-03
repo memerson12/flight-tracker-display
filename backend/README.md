@@ -12,15 +12,21 @@ Setup
    sudo apt-get update
    sudo apt-get install -y build-essential python3 pkg-config libvips-dev
 
+3. Create local runtime configuration (the resulting files are intentionally ignored by Git):
+
+   cp config.example.json config.json
+   cp .env.example .env
+
 Config
 
-- Admin password: set via environment variable ADMIN_PASSWORD or add `adminPassword` in `backend/config.json`.
+- Admin password: set via environment variable `ADMIN_PASSWORD`. Do not store credentials in `config.json`.
+- Direct cross-origin API access is disabled by default. Set `ALLOWED_ORIGINS` only when a separate trusted origin needs it.
 
 Data locations
 
 - Photos: `backend/photos/`
 - Thumbnails: `backend/photos/thumbs/`
-- Metadata DB: `backend/photos/photos.db` (SQLite, created automatically)
+- Metadata DB: `backend/data/photos.db` (SQLite, created automatically and migrated from the legacy public path)
 
 Run
 

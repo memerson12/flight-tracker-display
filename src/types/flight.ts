@@ -37,6 +37,7 @@ export interface Flight {
     latitude: number;
     longitude: number;
     observedAt?: number;
+    observerBearing?: number;
   };
   status: 'climbing' | 'descending' | 'cruising' | 'approaching' | 'landed';
 }

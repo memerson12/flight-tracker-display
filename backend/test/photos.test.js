@@ -1,11 +1,45 @@
 const assert = require('assert');
 const request = require('supertest');
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const TEST_ADMIN_PASSWORD = 'test-admin-password';
 const TEST_MAX_PHOTO_SIZE = 1024 * 1024;
+const TEST_RUNTIME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'flight-tracker-tests-'));
 
 process.env.ADMIN_PASSWORD = TEST_ADMIN_PASSWORD;
 process.env.MAX_PHOTO_SIZE = String(TEST_MAX_PHOTO_SIZE);
+process.env.PHOTO_STORAGE_DIR = path.join(TEST_RUNTIME_DIR, 'photos');
+process.env.PHOTO_DB_PATH = path.join(TEST_RUNTIME_DIR, 'data', 'photos.db');
+process.env.CONFIG_PATH = path.join(TEST_RUNTIME_DIR, 'config.json');
+
+fs.mkdirSync(path.dirname(process.env.PHOTO_DB_PATH), { recursive: true });
+fs.writeFileSync(process.env.CONFIG_PATH, JSON.stringify({
+  provider: 'flightradar24',
+  location: {
+    latitude: 37.7749,
+    longitude: -122.4194,
+    radius: 25,
+    name: 'Test monitoring area'
+  },
+  slideshow: { interval: 10000, shuffle: true, fitMode: 'cover' },
+  windowPosition: {
+    enabled: true,
+    address: '123 Example Street',
+    latitude: 37.7749,
+    longitude: -122.4194,
+    bearing: 90,
+    viewAngle: 90
+  },
+  clock: { use24Hour: true, timeZone: 'UTC' },
+  display: { brightness: 100 }
+}, null, 2));
+
+after(() => {
+  const metadataStore = require('../lib/metadataStore');
+  metadataStore.close();
+  fs.rmSync(TEST_RUNTIME_DIR, { recursive: true, force: true });
+});
 
 describe('Photos API (smoke)', function() {
   it('GET /api/photos returns 200', function(done) {
@@ -59,6 +93,46 @@ describe('Photos API (smoke)', function() {
               .expect(204, done);
           });
       });
+  });
+
+  it('does not expose the SQLite database through public photo storage', async function() {
+    const server = require('../server');
+    await request(server)
+      .get('/photos/photos.db')
+      .expect(404);
+  });
+
+  it('omits private observer details from public settings', async function() {
+    const server = require('../server');
+    const publicResponse = await request(server)
+      .get('/api/settings')
+      .expect(200);
+
+    assert.strictEqual(Object.hasOwn(publicResponse.body.windowPosition, 'address'), false);
+    assert.strictEqual(Object.hasOwn(publicResponse.body.windowPosition, 'latitude'), false);
+    assert.strictEqual(Object.hasOwn(publicResponse.body.windowPosition, 'longitude'), false);
+
+    const adminResponse = await request(server)
+      .get('/api/admin/settings')
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .expect(200);
+    assert.strictEqual(Object.hasOwn(adminResponse.body.windowPosition, 'address'), true);
+    assert.strictEqual(Object.hasOwn(adminResponse.body.windowPosition, 'latitude'), true);
+    assert.strictEqual(Object.hasOwn(adminResponse.body.windowPosition, 'longitude'), true);
+  });
+
+  it('does not grant arbitrary origins cross-origin read access', async function() {
+    const server = require('../server');
+    const response = await request(server)
+      .get('/api/settings')
+      .set('Origin', 'https://untrusted.example')
+      .expect(200);
+    assert.strictEqual(response.headers['access-control-allow-origin'], undefined);
+
+    await request(server)
+      .options('/api/settings')
+      .set('Origin', 'https://untrusted.example')
+      .expect(403);
   });
 
   it('returns a useful JSON error for oversized photos', function(done) {

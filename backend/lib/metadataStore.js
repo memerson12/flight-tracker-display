@@ -3,10 +3,45 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const PHOTOS_DIR = path.join(__dirname, '..', 'photos');
+const PHOTOS_DIR = process.env.PHOTO_STORAGE_DIR
+  ? path.resolve(process.env.PHOTO_STORAGE_DIR)
+  : path.join(__dirname, '..', 'photos');
 if (!fs.existsSync(PHOTOS_DIR)) fs.mkdirSync(PHOTOS_DIR, { recursive: true });
 
-const DB_PATH = path.join(PHOTOS_DIR, 'photos.db');
+const DATA_DIR = process.env.FLIGHT_TRACKER_DATA_DIR
+  ? path.resolve(process.env.FLIGHT_TRACKER_DATA_DIR)
+  : path.join(__dirname, '..', 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const DB_PATH = process.env.PHOTO_DB_PATH
+  ? path.resolve(process.env.PHOTO_DB_PATH)
+  : path.join(DATA_DIR, 'photos.db');
+const LEGACY_DB_PATH = path.join(PHOTOS_DIR, 'photos.db');
+
+const migrateLegacyDatabase = () => {
+  if (DB_PATH === LEGACY_DB_PATH || fs.existsSync(DB_PATH) || !fs.existsSync(LEGACY_DB_PATH)) return;
+
+  const suffixes = ['', '-wal', '-shm', '-journal'];
+  const moved = [];
+  try {
+    for (const suffix of suffixes) {
+      const source = `${LEGACY_DB_PATH}${suffix}`;
+      if (!fs.existsSync(source)) continue;
+      const destination = `${DB_PATH}${suffix}`;
+      fs.renameSync(source, destination);
+      moved.push({ source, destination });
+    }
+  } catch (error) {
+    for (const { source, destination } of moved.reverse()) {
+      if (fs.existsSync(destination) && !fs.existsSync(source)) {
+        fs.renameSync(destination, source);
+      }
+    }
+    throw new Error(`Failed to migrate the photo database out of public storage: ${error.message}`);
+  }
+};
+
+migrateLegacyDatabase();
 const db = new Database(DB_PATH);
 
 // Initialize schema
@@ -120,4 +155,8 @@ function remove(id) {
   return existing;
 }
 
-module.exports = { getAll, add, update, remove, getById };
+function close() {
+  if (db.open) db.close();
+}
+
+module.exports = { DB_PATH, getAll, add, update, remove, getById, close };

@@ -13,7 +13,9 @@ const metadataStore = require('../lib/metadataStore');
 const { resolvePhotoLocation } = require('../lib/photoLocation');
 const adminAuth = require('../middleware/adminAuth');
 
-const PHOTOS_DIR = path.join(__dirname, '..', 'photos');
+const PHOTOS_DIR = process.env.PHOTO_STORAGE_DIR
+  ? path.resolve(process.env.PHOTO_STORAGE_DIR)
+  : path.join(__dirname, '..', 'photos');
 const THUMBS_DIR = path.join(PHOTOS_DIR, 'thumbs');
 
 // Ensure dirs exist

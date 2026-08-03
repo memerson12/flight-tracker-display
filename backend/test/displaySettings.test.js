@@ -10,9 +10,9 @@ const {
 test('preserves saved observer details while toggling the indicator off', () => {
     const existing = {
       enabled: true,
-      address: '85 Macquarie Street, Teneriffe QLD 4005 Australia',
-      latitude: -27.4582173,
-      longitude: 153.0503689,
+      address: '123 Example Street, Example City',
+      latitude: -27.4705,
+      longitude: 153.026,
       bearing: 90,
       viewAngle: 90
     };

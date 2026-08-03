@@ -1,14 +1,11 @@
-import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plane } from 'lucide-react';
 
 import { getAirline, resolveFlightAirlineCode } from '@/lib/airlines';
 import { getDisplayAccent } from '@/lib/displayColor';
 import {
-  calculateBearing,
   getCompassLabel,
   mapBearingToWindow,
-  normalizeBearing,
-  projectPosition
+  normalizeBearing
 } from '@/lib/windowPosition';
 import { Flight } from '@/types/flight';
 import { WindowPositionSettings } from '@/types/settings';
@@ -19,34 +16,14 @@ type WindowPositionRailProps = {
 };
 
 const WindowPositionRail = ({ flight, settings }: WindowPositionRailProps) => {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const latitude = settings.latitude == null ? Number.NaN : Number(settings.latitude);
-  const longitude = settings.longitude == null ? Number.NaN : Number(settings.longitude);
+  const observerBearing = Number(flight.position.observerBearing);
   const centerBearing = normalizeBearing(Number(settings.bearing ?? 90));
   const viewAngle = Math.min(180, Math.max(10, Number(settings.viewAngle ?? 90)));
 
-  if (!settings.enabled || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (!settings.enabled || !Number.isFinite(observerBearing)) {
     return null;
   }
-
-  const observedAt = flight.position.observedAt;
-  const projectedPosition = projectPosition(
-    { latitude: flight.position.latitude, longitude: flight.position.longitude },
-    flight.position.heading,
-    flight.position.speed,
-    observedAt ? now - observedAt : 0
-  );
-
-  const bearing = calculateBearing(
-    { latitude, longitude },
-    projectedPosition
-  );
+  const bearing = normalizeBearing(observerBearing);
   const position = mapBearingToWindow(bearing, centerBearing, viewAngle);
   const minimumBearing = normalizeBearing(centerBearing - viewAngle / 2);
   const maximumBearing = normalizeBearing(centerBearing + viewAngle / 2);

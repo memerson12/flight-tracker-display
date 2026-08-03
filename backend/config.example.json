@@ -1,0 +1,36 @@
+{
+  "provider": "flightradar24",
+  "location": {
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "radius": 25,
+    "name": "Example monitoring area"
+  },
+  "area": null,
+  "slideshow": {
+    "interval": 10000,
+    "shuffle": true,
+    "fitMode": "cover"
+  },
+  "windowPosition": {
+    "enabled": false,
+    "address": "",
+    "latitude": null,
+    "longitude": null,
+    "bearing": 90,
+    "viewAngle": 90
+  },
+  "clock": {
+    "use24Hour": true,
+    "timeZone": "UTC"
+  },
+  "display": {
+    "brightness": 100,
+    "quietHours": {
+      "enabled": false,
+      "start": "22:00",
+      "end": "07:00",
+      "brightness": 0
+    }
+  }
+}

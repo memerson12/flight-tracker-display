@@ -292,7 +292,7 @@ const Admin = () => {
   const { data: settingsData, refetch: refetchSettings } = useQuery({
     queryKey: ['admin-settings'],
     queryFn: async () => {
-      const response = await fetch('/api/settings');
+      const response = await fetch('/api/admin/settings', { headers: authHeaders });
       if (!response.ok) throw new Error('Failed to load settings');
       return response.json() as Promise<SettingsResponse>;
     },

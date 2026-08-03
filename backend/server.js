@@ -5,6 +5,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const { createFlightAdapter, validateProviderConfig } = require('./adapters');
 const { normalizeFlightData } = require('./lib/flightNormalizer');
+const { withObserverBearings } = require('./lib/observerBearing');
 const adminAuth = require('./middleware/adminAuth');
 const {
     defaultClockSettings,
@@ -17,9 +18,14 @@ const {
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+const PHOTO_STORAGE_DIR = process.env.PHOTO_STORAGE_DIR
+    ? path.resolve(process.env.PHOTO_STORAGE_DIR)
+    : path.join(__dirname, 'photos');
 
 // Configuration loaded from config.json
-const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_PATH = process.env.CONFIG_PATH
+    ? path.resolve(process.env.CONFIG_PATH)
+    : path.join(__dirname, 'config.json');
 let config = null;
 let flightAdapter = null;
 
@@ -80,14 +86,26 @@ function reloadConfig(nextConfig) {
     return validation;
 }
 
-// CORS middleware
+const allowedOrigins = new Set(
+    String(process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+);
+
+// Cross-origin access is opt-in. Same-origin requests and the Vite proxy do not
+// require CORS response headers.
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    const origin = req.get('Origin');
+    if (origin && allowedOrigins.has(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Vary', 'Origin');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    }
     
     if (req.method === 'OPTIONS') {
-        res.sendStatus(200);
+        res.sendStatus(origin && allowedOrigins.has(origin) ? 204 : 403);
         return;
     }
     next();
@@ -102,8 +120,14 @@ app.use(cookieParser());
 const photosRouter = require('./routes/photos');
 app.use('/api/photos', photosRouter);
 
-// Serve photos statically
-app.use('/photos', express.static(path.join(__dirname, 'photos')));
+const PUBLIC_PHOTO_PATH = /^\/(?:thumbs\/)?[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpe?g|png|webp)$/i;
+
+// Serve only generated photo assets. Databases, journals, temporary files, and
+// arbitrary files under the storage directory must never become public.
+app.use('/photos', (req, res, next) => {
+    if (!PUBLIC_PHOTO_PATH.test(req.path)) return res.sendStatus(404);
+    return next();
+}, express.static(PHOTO_STORAGE_DIR, { dotfiles: 'deny', fallthrough: false }));
 
 // Flight API endpoints using adapters
 app.get('/api/flights/overhead', async (req, res) => {
@@ -137,7 +161,8 @@ app.get('/api/flights/overhead', async (req, res) => {
             return res.status(500).json({ error: 'Invalid configuration: missing location or area settings' });
         }
         console.log(`Fetched ${data.flights.length} flights from provider ${flightAdapter.name}`);
-        res.json(normalizeFlightData(data));
+        const normalized = normalizeFlightData(data);
+        res.json(withObserverBearings(normalized, config.windowPosition));
     } catch (error) {
         console.error('Error fetching flights:', error.message);
         res.status(500).json({ error: 'Failed to fetch flight data' });
@@ -145,6 +170,25 @@ app.get('/api/flights/overhead', async (req, res) => {
 });
 
 app.get('/api/settings', (req, res) => {
+    if (!config) {
+        return res.status(500).json({ error: 'Server configuration not loaded' });
+    }
+
+    const slideshow = { ...defaultSlideshowSettings, ...(config.slideshow || {}) };
+    const privateWindowPosition = normalizeWindowPositionSettings(config.windowPosition);
+    const windowPosition = {
+        enabled: privateWindowPosition.enabled
+            && privateWindowPosition.latitude !== null
+            && privateWindowPosition.longitude !== null,
+        bearing: privateWindowPosition.bearing,
+        viewAngle: privateWindowPosition.viewAngle
+    };
+    const clock = normalizeClockSettings(config.clock);
+    const display = normalizeDisplaySettings(config.display);
+    return res.json({ slideshow, windowPosition, clock, display });
+});
+
+app.get('/api/admin/settings', adminAuth, (req, res) => {
     if (!config) {
         return res.status(500).json({ error: 'Server configuration not loaded' });
     }
