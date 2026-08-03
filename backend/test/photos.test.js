@@ -55,7 +55,7 @@ describe('Photos API (smoke)', function() {
       });
   });
 
-  it('POST/PUT/DELETE photo lifecycle', function(done) {
+  it('keeps disabled photos manageable by admins without exposing them publicly', async function() {
     this.timeout(5000);
     const server = require('../server');
     const fs = require('fs');
@@ -63,36 +63,54 @@ describe('Photos API (smoke)', function() {
     const base64 = fs.readFileSync(path.join(__dirname, 'fixtures', '1x1.png'), 'utf8').toString().trim();
     const buffer = Buffer.from(base64, 'base64');
 
-    request(server)
+    const uploadResponse = await request(server)
       .post('/api/photos')
       .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .attach('file', buffer, '1x1.png')
-      .expect(201)
-      .end(function(err, res) {
-        if (err) return done(err);
-        const body = Array.isArray(res.body) ? res.body[0] : res.body;
-        if (!body || !body.id) return done(new Error('Invalid response'));
-        if (Object.hasOwn(body, 'caption')) return done(new Error('Legacy caption field was returned'));
-        if (Object.hasOwn(body, 'latitude') || Object.hasOwn(body, 'longitude')) {
-          return done(new Error('Private GPS coordinates were returned'));
-        }
+      .expect(201);
 
-        // Update slideshow visibility
-        request(server)
-          .put(`/api/photos/${body.id}`)
-          .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
-          .send({ enabled: false })
-          .expect(200)
-          .end(function(err2) {
-            if (err2) return done(err2);
+    const body = Array.isArray(uploadResponse.body) ? uploadResponse.body[0] : uploadResponse.body;
+    assert.ok(body?.id, 'Expected an uploaded photo id');
+    assert.strictEqual(Object.hasOwn(body, 'caption'), false);
+    assert.strictEqual(Object.hasOwn(body, 'latitude'), false);
+    assert.strictEqual(Object.hasOwn(body, 'longitude'), false);
 
-            // Delete
-            request(server)
-              .delete(`/api/photos/${body.id}`)
-              .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
-              .expect(204, done);
-          });
-      });
+    await request(server)
+      .put(`/api/photos/${body.id}`)
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .send({ enabled: false })
+      .expect(200);
+
+    const publicListing = await request(server)
+      .get('/api/photos')
+      .expect(200);
+    assert.strictEqual(publicListing.body.some((photo) => photo.id === body.id), false);
+
+    await request(server)
+      .get('/api/photos?admin=1')
+      .expect(401);
+
+    const adminListing = await request(server)
+      .get('/api/photos?admin=1')
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .expect(200);
+    assert.strictEqual(adminListing.body.find((photo) => photo.id === body.id)?.enabled, 0);
+
+    await request(server)
+      .put(`/api/photos/${body.id}`)
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .send({ enabled: true })
+      .expect(200);
+
+    const restoredListing = await request(server)
+      .get('/api/photos')
+      .expect(200);
+    assert.strictEqual(restoredListing.body.some((photo) => photo.id === body.id), true);
+
+    await request(server)
+      .delete(`/api/photos/${body.id}`)
+      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
+      .expect(204);
   });
 
   it('does not expose the SQLite database through public photo storage', async function() {

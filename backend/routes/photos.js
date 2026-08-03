@@ -62,13 +62,16 @@ const serializePhoto = (photo) => {
   return safePhoto;
 };
 
+const requireAdminForFullListing = (req, res, next) => {
+  if (req.query.admin !== '1') return next();
+  return adminAuth(req, res, next);
+};
+
 // GET /api/photos
-router.get('/', (req, res) => {
+router.get('/', requireAdminForFullListing, (req, res) => {
   try {
-    const all = metadataStore.getAll();
-    // If query param `admin=1` return everything, otherwise only enabled
-    if (req.query.admin === '1') return res.json(all.map(serializePhoto));
-    return res.json(all.filter(p => p.enabled).map(serializePhoto));
+    const isAdminListing = req.query.admin === '1';
+    return res.json(metadataStore.getAll(isAdminListing).map(serializePhoto));
   } catch (err) {
     console.error('Failed to read photos metadata', err.message);
     res.status(500).json({ error: 'Failed to read metadata' });
