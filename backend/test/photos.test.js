@@ -35,6 +35,17 @@ fs.writeFileSync(process.env.CONFIG_PATH, JSON.stringify({
   display: { brightness: 100 }
 }, null, 2));
 
+const server = require('../server');
+let adminAgent;
+
+before(async function() {
+  adminAgent = request.agent(server);
+  await adminAgent
+    .post('/api/admin/session')
+    .send({ password: TEST_ADMIN_PASSWORD })
+    .expect(204);
+});
+
 after(() => {
   const metadataStore = require('../lib/metadataStore');
   metadataStore.close();
@@ -44,7 +55,6 @@ after(() => {
 describe('Photos API (smoke)', function() {
   it('GET /api/photos returns 200', function(done) {
     this.timeout(5000);
-    const server = require('../server');
     request(server)
       .get('/api/photos')
       .expect(200)
@@ -57,15 +67,13 @@ describe('Photos API (smoke)', function() {
 
   it('keeps disabled photos manageable by admins without exposing them publicly', async function() {
     this.timeout(5000);
-    const server = require('../server');
     const fs = require('fs');
     // fixture file contains base64 payload; decode to buffer for upload
     const base64 = fs.readFileSync(path.join(__dirname, 'fixtures', '1x1.png'), 'utf8').toString().trim();
     const buffer = Buffer.from(base64, 'base64');
 
-    const uploadResponse = await request(server)
+    const uploadResponse = await adminAgent
       .post('/api/photos')
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .attach('file', buffer, '1x1.png')
       .expect(201);
 
@@ -75,9 +83,8 @@ describe('Photos API (smoke)', function() {
     assert.strictEqual(Object.hasOwn(body, 'latitude'), false);
     assert.strictEqual(Object.hasOwn(body, 'longitude'), false);
 
-    await request(server)
+    await adminAgent
       .put(`/api/photos/${body.id}`)
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .send({ enabled: false })
       .expect(200);
 
@@ -90,15 +97,13 @@ describe('Photos API (smoke)', function() {
       .get('/api/photos?admin=1')
       .expect(401);
 
-    const adminListing = await request(server)
+    const adminListing = await adminAgent
       .get('/api/photos?admin=1')
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .expect(200);
     assert.strictEqual(adminListing.body.find((photo) => photo.id === body.id)?.enabled, 0);
 
-    await request(server)
+    await adminAgent
       .put(`/api/photos/${body.id}`)
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .send({ enabled: true })
       .expect(200);
 
@@ -107,21 +112,51 @@ describe('Photos API (smoke)', function() {
       .expect(200);
     assert.strictEqual(restoredListing.body.some((photo) => photo.id === body.id), true);
 
-    await request(server)
+    await adminAgent
       .delete(`/api/photos/${body.id}`)
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .expect(204);
   });
 
+  it('uses an HttpOnly session cookie and invalidates it on logout', async function() {
+    const sessionAgent = request.agent(server);
+    await sessionAgent
+      .post('/api/admin/session')
+      .send({ password: 'wrong-password' })
+      .expect(401);
+
+    const loginResponse = await sessionAgent
+      .post('/api/admin/session')
+      .send({ password: TEST_ADMIN_PASSWORD })
+      .expect(204);
+    const sessionCookie = loginResponse.headers['set-cookie']?.[0] || '';
+    assert.match(sessionCookie, /flight_frame_admin=/);
+    assert.match(sessionCookie, /HttpOnly/i);
+    assert.match(sessionCookie, /SameSite=Strict/i);
+
+    await sessionAgent.get('/api/admin/session').expect(204);
+    await sessionAgent.delete('/api/admin/session').expect(204);
+    await sessionAgent.get('/api/admin/session').expect(401);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await request(server)
+        .post('/api/admin/session')
+        .send({ password: 'still-wrong' })
+        .expect(401);
+    }
+    const throttled = await request(server)
+      .post('/api/admin/session')
+      .send({ password: 'still-wrong' })
+      .expect(429);
+    assert.match(throttled.body.error, /too many failed sign-in attempts/i);
+  });
+
   it('does not expose the SQLite database through public photo storage', async function() {
-    const server = require('../server');
     await request(server)
       .get('/photos/photos.db')
       .expect(404);
   });
 
   it('omits private observer details from public settings', async function() {
-    const server = require('../server');
     const publicResponse = await request(server)
       .get('/api/settings')
       .expect(200);
@@ -130,9 +165,8 @@ describe('Photos API (smoke)', function() {
     assert.strictEqual(Object.hasOwn(publicResponse.body.windowPosition, 'latitude'), false);
     assert.strictEqual(Object.hasOwn(publicResponse.body.windowPosition, 'longitude'), false);
 
-    const adminResponse = await request(server)
+    const adminResponse = await adminAgent
       .get('/api/admin/settings')
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .expect(200);
     assert.strictEqual(Object.hasOwn(adminResponse.body.windowPosition, 'address'), true);
     assert.strictEqual(Object.hasOwn(adminResponse.body.windowPosition, 'latitude'), true);
@@ -140,7 +174,6 @@ describe('Photos API (smoke)', function() {
   });
 
   it('does not grant arbitrary origins cross-origin read access', async function() {
-    const server = require('../server');
     const response = await request(server)
       .get('/api/settings')
       .set('Origin', 'https://untrusted.example')
@@ -155,11 +188,9 @@ describe('Photos API (smoke)', function() {
 
   it('returns a useful JSON error for oversized photos', function(done) {
     this.timeout(5000);
-    const server = require('../server');
 
-    request(server)
+    adminAgent
       .post('/api/photos')
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .attach('file', Buffer.alloc(TEST_MAX_PHOTO_SIZE + 1), 'too-large.jpg')
       .expect(413)
       .expect('Content-Type', /json/)
@@ -171,11 +202,9 @@ describe('Photos API (smoke)', function() {
   });
 
   it('returns a useful JSON error for unsupported files', function(done) {
-    const server = require('../server');
 
-    request(server)
+    adminAgent
       .post('/api/photos')
-      .set('Authorization', `Bearer ${TEST_ADMIN_PASSWORD}`)
       .attach('file', Buffer.from('not an image'), 'notes.txt')
       .expect(400)
       .expect('Content-Type', /json/)

@@ -9,8 +9,12 @@ async function run() {
   const form = new FormData();
   form.append('file', fs.createReadStream(path.join(__dirname, 'fixtures', '1x1.png')));
   try {
+    const login = await axios.post('http://localhost:8000/api/admin/session', { password });
+    const cookie = (login.headers['set-cookie'] || [])
+      .map((value) => value.split(';', 1)[0])
+      .join('; ');
     const res = await axios.post('http://localhost:8000/api/photos', form, {
-      headers: { ...form.getHeaders(), Authorization: `Bearer ${password}` },
+      headers: { ...form.getHeaders(), Cookie: cookie },
       maxContentLength: Infinity,
       maxBodyLength: Infinity
     });

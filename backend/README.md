@@ -20,6 +20,8 @@ Setup
 Config
 
 - Admin password: set via environment variable `ADMIN_PASSWORD`. Do not store credentials in `config.json`.
+- Admin sign-in creates an eight-hour, HttpOnly, SameSite=Strict session cookie; the raw password is not stored by the browser. Set `ADMIN_SESSION_TTL_MS` to change the duration.
+- Set `ADMIN_COOKIE_SECURE=true` when the app is served over HTTPS. Server restarts intentionally invalidate existing admin sessions.
 - Direct cross-origin API access is disabled by default. Set `ALLOWED_ORIGINS` only when a separate trusted origin needs it.
 
 Data locations
@@ -40,6 +42,7 @@ API (high-level)
 - `GET /api/airports/:icao/arrivals`
 - `GET /api/airports/:icao/departures`
 - `GET /api/photos`
+- `GET/POST/DELETE /api/admin/session`
 - `POST /api/photos` (admin)
 - `PUT /api/photos/:id` (admin)
 - `DELETE /api/photos/:id` (admin)

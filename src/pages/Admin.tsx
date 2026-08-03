@@ -165,7 +165,8 @@ const fitMapToTrackingArea = (
 };
 
 const Admin = () => {
-  const [token, setToken] = useState(() => localStorage.getItem('adminToken') || '');
+  const [authStatus, setAuthStatus] = useState<'checking' | 'authenticated' | 'unauthenticated'>('checking');
+  const [authGeneration, setAuthGeneration] = useState(0);
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
@@ -229,6 +230,7 @@ const Admin = () => {
   const rectBoundsRef = useRef(rectBounds);
   const updateRectangleRef = useRef<(next: RectangleBounds) => void>(() => undefined);
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+  const isAuthenticated = authStatus === 'authenticated';
 
   const parsedObserverLatitude = Number(observerLatitude);
   const parsedObserverLongitude = Number(observerLongitude);
@@ -239,7 +241,33 @@ const Admin = () => {
     ? [parsedObserverLongitude, parsedObserverLatitude]
     : null;
 
-  const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  useEffect(() => {
+    let active = true;
+    localStorage.removeItem('adminToken');
+
+    fetch('/api/admin/session', { credentials: 'same-origin' })
+      .then((response) => {
+        if (active) setAuthStatus(response.ok ? 'authenticated' : 'unauthenticated');
+      })
+      .catch(() => {
+        if (!active) return;
+        setLoginError('Unable to reach the admin service.');
+        setAuthStatus('unauthenticated');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const adminFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, { ...init, credentials: 'same-origin' });
+    if (response.status === 401) {
+      setLoginError('Your admin session expired. Sign in again.');
+      setAuthStatus('unauthenticated');
+    }
+    return response;
+  };
 
   const syncRectangleFields = (bounds: RectangleBounds) => {
     setNwLat(bounds.north.toFixed(6));
@@ -282,33 +310,33 @@ const Admin = () => {
   }, [rectBounds]);
 
   const { data: photosData, refetch: refetchPhotos } = useQuery({
-    queryKey: ['admin-photos', token],
+    queryKey: ['admin-photos', authGeneration],
     queryFn: async () => {
-      const response = await fetch('/api/photos?admin=1', { headers: authHeaders });
+      const response = await adminFetch('/api/photos?admin=1');
       if (!response.ok) throw new Error('Failed to load photos');
       return response.json() as Promise<AdminPhoto[]>;
     },
-    enabled: !!token
+    enabled: isAuthenticated
   });
 
   const { data: settingsData, refetch: refetchSettings } = useQuery({
-    queryKey: ['admin-settings', token],
+    queryKey: ['admin-settings', authGeneration],
     queryFn: async () => {
-      const response = await fetch('/api/admin/settings', { headers: authHeaders });
+      const response = await adminFetch('/api/admin/settings');
       if (!response.ok) throw new Error('Failed to load settings');
       return response.json() as Promise<SettingsResponse>;
     },
-    enabled: !!token
+    enabled: isAuthenticated
   });
 
   const { data: configData, refetch: refetchConfig } = useQuery({
-    queryKey: ['admin-config', token],
+    queryKey: ['admin-config', authGeneration],
     queryFn: async () => {
-      const response = await fetch('/api/config', { headers: authHeaders });
+      const response = await adminFetch('/api/config');
       if (!response.ok) throw new Error('Failed to load config');
       return response.json() as Promise<ConfigResponse>;
     },
-    enabled: !!token
+    enabled: isAuthenticated
   });
 
   useEffect(() => {
@@ -444,7 +472,7 @@ const Admin = () => {
   }, [locationMode, mapboxToken, searchQuery, trackingSearchResolved]);
 
   useEffect(() => {
-    if (!token || locationMode !== 'rectangle') return;
+    if (!isAuthenticated || locationMode !== 'rectangle') return;
     if (!mapboxToken) {
       setMapError('Missing Mapbox token. Set VITE_MAPBOX_TOKEN in .env.');
       return;
@@ -607,7 +635,7 @@ const Admin = () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [locationMode, mapboxToken, token]);
+  }, [isAuthenticated, locationMode, mapboxToken]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -660,18 +688,21 @@ const Admin = () => {
     setLoginLoading(true);
     setLoginError('');
     try {
-      const response = await fetch('/api/config', {
-        headers: { Authorization: `Bearer ${passwordInput}` }
+      const response = await fetch('/api/admin/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput })
       });
 
       if (!response.ok) {
-        setLoginError('Invalid password');
+        setLoginError(await getResponseError(response, 'Invalid password'));
         setLoginLoading(false);
         return;
       }
 
-      localStorage.setItem('adminToken', passwordInput);
-      setToken(passwordInput);
+      setAuthGeneration((generation) => generation + 1);
+      setAuthStatus('authenticated');
       setPasswordInput('');
     } catch (error) {
       setLoginError('Failed to authenticate');
@@ -680,9 +711,18 @@ const Admin = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('adminToken');
-    setToken('');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/session', {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+    } finally {
+      setAuthGeneration((generation) => generation + 1);
+      setAuthStatus('unauthenticated');
+      setPasswordInput('');
+      setLoginError('');
+    }
   };
 
   const handleUpload = async (files: File[], onStatus: PhotoUploadStatusListener) => {
@@ -690,7 +730,7 @@ const Admin = () => {
       const sizeError = getPhotoSizeError(files);
       if (sizeError) throw new Error(sizeError);
 
-      await uploadPhotoFiles(files, token, onStatus);
+      await uploadPhotoFiles(files, onStatus);
       onStatus({ stage: 'refreshing', progress: 100 });
       await refetchPhotos();
       toast.success(`${files.length} photo${files.length === 1 ? '' : 's'} uploaded.`);
@@ -702,12 +742,9 @@ const Admin = () => {
   };
 
   const updatePhoto = async (id: string, patch: Record<string, unknown>) => {
-    const response = await fetch(`/api/photos/${id}`, {
+    const response = await adminFetch(`/api/photos/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     });
 
@@ -732,9 +769,8 @@ const Admin = () => {
   const handleDeletePhoto = async (id: string) => {
     setPhotoActionId(id);
     try {
-      const response = await fetch(`/api/photos/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders
+      const response = await adminFetch(`/api/photos/${id}`, {
+        method: 'DELETE'
       });
 
       if (!response.ok) {
@@ -807,12 +843,9 @@ const Admin = () => {
   };
 
   const saveDisplaySettings = async () => {
-    const response = await fetch('/api/settings', {
+    const response = await adminFetch('/api/settings', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         slideshow: {
           interval: Number(slideshowInterval),
@@ -843,12 +876,9 @@ const Admin = () => {
   };
 
   const saveWindowPositionSettings = async () => {
-    const response = await fetch('/api/settings', {
+    const response = await adminFetch('/api/settings', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         windowPosition: {
           enabled: windowPositionEnabled,
@@ -952,12 +982,9 @@ const Admin = () => {
   };
 
   const saveTrackingConfig = async () => {
-    const response = await fetch('/api/config', {
+    const response = await adminFetch('/api/config', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildTrackingConfigPayload())
     });
 
@@ -1050,7 +1077,15 @@ const Admin = () => {
     updateRectangle(parsed);
   };
 
-  if (!token) {
+  if (authStatus === 'checking') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <p role="status" className="text-sm text-muted-foreground">Checking admin session…</p>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
         <div className="w-full max-w-md card-glass rounded-3xl p-8">

@@ -30,6 +30,7 @@ class FakeXMLHttpRequest extends FakeEventTarget {
   method = '';
   url = '';
   headers = new Map<string, string>();
+  withCredentials = false;
   body: Document | XMLHttpRequestBodyInit | null = null;
 
   constructor() {
@@ -80,14 +81,14 @@ describe('photo upload validation', () => {
     const statuses: Array<{ stage: string; progress: number }> = [];
     const upload = uploadPhotoFiles(
       [new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })],
-      'secret',
       (status) => statuses.push(status)
     );
     const request = FakeXMLHttpRequest.latest;
 
     expect(request.method).toBe('POST');
     expect(request.url).toBe('/api/photos');
-    expect(request.headers.get('Authorization')).toBe('Bearer secret');
+    expect(request.headers.has('Authorization')).toBe(false);
+    expect(request.withCredentials).toBe(true);
     expect(request.body).toBeInstanceOf(FormData);
 
     request.upload.emit('progress', { lengthComputable: true, loaded: 3, total: 10 });
@@ -107,7 +108,6 @@ describe('photo upload validation', () => {
     vi.stubGlobal('XMLHttpRequest', FakeXMLHttpRequest);
     const upload = uploadPhotoFiles(
       [new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })],
-      'secret',
       () => undefined
     );
     const request = FakeXMLHttpRequest.latest;

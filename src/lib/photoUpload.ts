@@ -40,7 +40,6 @@ const getUploadError = (responseText: string, fallback: string) => {
 
 export const uploadPhotoFiles = (
   files: File[],
-  token: string,
   onStatus: PhotoUploadStatusListener
 ) => new Promise<void>((resolve, reject) => {
   const formData = new FormData();
@@ -48,7 +47,7 @@ export const uploadPhotoFiles = (
 
   const request = new XMLHttpRequest();
   request.open('POST', '/api/photos');
-  request.setRequestHeader('Authorization', `Bearer ${token}`);
+  request.withCredentials = true;
 
   request.upload.addEventListener('progress', (event) => {
     if (!event.lengthComputable || event.total === 0) return;

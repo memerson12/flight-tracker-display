@@ -116,6 +116,9 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(cookieParser());
 
+const adminSessionRouter = require('./routes/adminSession');
+app.use('/api/admin/session', adminSessionRouter);
+
 // Mount photo API routes
 
 const photosRouter = require('./routes/photos');
