@@ -13,10 +13,10 @@ const flight = (id: string, altitude: number): Flight => ({
   id,
   flightNumber: id,
   callsign: id,
-  airline: { name: 'Test Air', iata: 'TA', icao: 'TST', country: 'US' },
+  airline: { name: 'Test Air', iata: 'TA', icao: 'TST' },
   aircraft: { type: 'Test', icao: 'TEST', registration: id },
-  departure: { iata: 'AAA', icao: 'AAAA', city: 'Alpha', country: 'US' },
-  arrival: { iata: 'BBB', icao: 'BBBB', city: 'Bravo', country: 'US' },
+  departure: { airport: 'Alpha Airport', iata: 'AAA', city: 'Alpha', country: 'US' },
+  arrival: { airport: 'Bravo Airport', iata: 'BBB', city: 'Bravo', country: 'US' },
   position: {
     altitude,
     speed: 400,

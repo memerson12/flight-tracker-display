@@ -227,6 +227,7 @@ const Admin = () => {
   const [mapError, setMapError] = useState('');
   const [rectBounds, setRectBounds] = useState<RectangleBounds>(defaultBounds);
   const rectBoundsRef = useRef(rectBounds);
+  const updateRectangleRef = useRef<(next: RectangleBounds) => void>(() => undefined);
   const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
 
   const parsedObserverLatitude = Number(observerLatitude);
@@ -252,6 +253,7 @@ const Admin = () => {
     setRectBounds(sanitized);
     syncRectangleFields(sanitized);
   };
+  updateRectangleRef.current = updateRectangle;
 
   const updateMapGeometry = (bounds: RectangleBounds) => {
     const map = mapRef.current;
@@ -455,17 +457,21 @@ const Admin = () => {
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/dark-v11',
-      center: [(rectBounds.east + rectBounds.west) / 2, (rectBounds.north + rectBounds.south) / 2],
+      center: [
+        (rectBoundsRef.current.east + rectBoundsRef.current.west) / 2,
+        (rectBoundsRef.current.north + rectBoundsRef.current.south) / 2
+      ],
       zoom: 10
     });
 
     mapRef.current = map;
 
     const initializeRectangle = () => {
+      const bounds = rectBoundsRef.current;
       if (!map.getSource(rectangleLayerId)) {
         map.addSource(rectangleLayerId, {
           type: 'geojson',
-          data: boundsToPolygon(rectBounds)
+          data: boundsToPolygon(bounds)
         });
 
         map.addLayer({
@@ -490,10 +496,10 @@ const Admin = () => {
       }
 
       const corners = {
-        nw: [rectBounds.west, rectBounds.north],
-        ne: [rectBounds.east, rectBounds.north],
-        se: [rectBounds.east, rectBounds.south],
-        sw: [rectBounds.west, rectBounds.south]
+        nw: [bounds.west, bounds.north],
+        ne: [bounds.east, bounds.north],
+        se: [bounds.east, bounds.south],
+        sw: [bounds.west, bounds.south]
       } as const;
 
       Object.entries(corners).forEach(([key, coords]) => {
@@ -523,7 +529,7 @@ const Admin = () => {
             next.south = lat;
             next.west = lng;
           }
-          updateRectangle(next);
+          updateRectangleRef.current(next);
         });
 
         cornerMarkersRef.current[key] = marker;
@@ -533,7 +539,7 @@ const Admin = () => {
       if (viewerCoordinates && !viewerMarkerRef.current) {
         viewerMarkerRef.current = createViewerMarker(map, viewerCoordinates);
       }
-      fitMapToTrackingArea(map, rectBounds, viewerCoordinates);
+      fitMapToTrackingArea(map, bounds, viewerCoordinates);
     };
 
     const ensureRectangleLayers = () => {
@@ -584,7 +590,7 @@ const Admin = () => {
       }
 
       if (dragCurrentRef.current) {
-        updateRectangle(dragCurrentRef.current);
+        updateRectangleRef.current(dragCurrentRef.current);
       }
 
       isDraggingRectRef.current = false;
