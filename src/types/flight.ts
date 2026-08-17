@@ -14,6 +14,17 @@ export interface Flight {
     type: string;
     icao: string;
     registration: string;
+    identity?: {
+      category: 'business-jet';
+      label: string;
+      brandCode?: string;
+      registration: string;
+      manufacturer?: string;
+      model?: string;
+      registeredName?: string;
+      relationship?: 'registered-owner' | 'registered-operator' | 'registered-holder' | '';
+      registry?: 'FAA' | 'CASA' | '';
+    };
   };
   departure: {
     airport: string;

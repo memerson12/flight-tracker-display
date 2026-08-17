@@ -1,6 +1,8 @@
 const FEET_PER_METER = 3.28084;
 const KNOTS_PER_MPS = 1.94384;
 const FPM_PER_MPS = 196.8504;
+const { resolveAircraftIdentity } = require('./aircraftClassification');
+const { lookupAircraftRegistration } = require('./aircraftRegistry');
 const { resolveAirlineIdentity } = require('./airlineIdentity');
 const unknownAirlineWarnings = new Set();
 
@@ -82,6 +84,22 @@ function normalizeFlight(rawFlight) {
   }
   const departure = normalizeAirport(rawFlight.origin);
   const arrival = normalizeAirport(rawFlight.destination);
+  const registryRecord = airline.resolutionSource === 'unknown'
+    ? lookupAircraftRegistration({
+        registration: rawFlight.registration,
+        modeS: rawFlight.icao24
+      })
+    : null;
+  const aircraftIdentity = airline.resolutionSource === 'unknown'
+    ? resolveAircraftIdentity({
+        aircraftType: rawFlight.aircraft,
+        registration: rawFlight.registration,
+        registryRecord
+      })
+    : null;
+  const registration = String(
+    aircraftIdentity?.registration || registryRecord?.registration || rawFlight.registration || ''
+  ).trim();
 
   return {
     id: rawFlight.id || `${rawFlight.icao24 || 'unknown'}_${rawFlight.callsign || 'unknown'}`,
@@ -91,7 +109,8 @@ function normalizeFlight(rawFlight) {
     aircraft: {
       type: String(rawFlight.aircraft || '').trim(),
       icao: String(rawFlight.aircraft || '').trim(),
-      registration: String(rawFlight.registration || '').trim()
+      registration,
+      ...(aircraftIdentity ? { identity: aircraftIdentity } : {})
     },
     departure,
     arrival,

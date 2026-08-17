@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "test": "mocha --recursive test",
-    "start": "node server.js"
+    "start": "node server.js",
+    "update:aircraft-registry": "node scripts/updateAircraftRegistry.js"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +21,7 @@
     "express-rate-limit": "^8.1.0",
     "multer": "^2.0.2",
     "sharp": "^0.34.4",
+    "unzipper": "0.12.5",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

@@ -33,6 +33,17 @@ const getDisplayStatus = (flight: Flight, isLingering: boolean) => {
 
 const formatMetric = (value: number | null) => value === null ? '—' : value.toLocaleString();
 
+const getRegistryAttribution = (flight: Flight) => {
+  const identity = flight.aircraft.identity;
+  if (!identity?.registeredName) return '';
+  const prefix = identity.relationship === 'registered-operator'
+    ? 'Operated by'
+    : identity.relationship === 'registered-holder'
+      ? 'Registered holder'
+      : 'Registered to';
+  return `${prefix} ${identity.registeredName}`;
+};
+
 const MetricCard = ({ accent, icon, label, value, unit }: MetricCardProps) => (
   <div
     className="card-glass rounded-2xl px-5 py-4 text-center"
@@ -50,18 +61,27 @@ const MetricCard = ({ accent, icon, label, value, unit }: MetricCardProps) => (
 );
 
 const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
-  const airlineCode = resolveFlightAirlineCode({
+  const resolvedAirlineCode = resolveFlightAirlineCode({
     displayCode: flight.airline.displayCode,
     icao: flight.airline.icao,
     iata: flight.airline.iata,
     flightNumber: flight.flightNumber,
     callsign: flight.callsign
   });
+  const aircraftIdentity = flight.aircraft.identity;
+  const airlineCode = aircraftIdentity?.brandCode || resolvedAirlineCode;
   const airline = getAirline(airlineCode);
-  const accent = getDisplayAccent(airline.color);
+  const accent = getDisplayAccent(aircraftIdentity && !aircraftIdentity.brandCode ? '#72A7D8' : airline.color);
   const airlineLogo = getLogoUrl(airlineCode);
+  const displayName = aircraftIdentity?.label
+    || (airline.name === 'Unknown Airline' ? 'Unknown Aircraft' : airline.name);
   const [logoFailed, setLogoFailed] = useState(false);
-  const aircraftName = getAircraftName(flight.aircraft.icao || flight.aircraft.type);
+  const rawAircraftType = flight.aircraft.icao || flight.aircraft.type;
+  const typeName = getAircraftName(rawAircraftType);
+  const aircraftName = aircraftIdentity?.model
+    && (typeName === 'Unknown Aircraft' || typeName === rawAircraftType)
+    ? [aircraftIdentity.manufacturer, aircraftIdentity.model].filter(Boolean).join(' ')
+    : typeName;
   const hasDeparture = hasUsefulAirportCode(flight.departure.iata);
   const hasArrival = hasUsefulAirportCode(flight.arrival.iata);
   const hasCompleteRoute = hasDeparture && hasArrival;
@@ -70,10 +90,17 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
     : hasArrival
       ? [flight.arrival.iata, flight.arrival.city].filter(Boolean).join(' / ')
       : null;
-  const primaryIdentifier = flight.flightNumber || flight.callsign || flight.aircraft.registration || 'Unknown flight';
-  const secondaryIdentifier = flight.callsign && flight.callsign !== flight.flightNumber
-    ? flight.callsign
-    : flight.aircraft.registration;
+  const primaryIdentifier = aircraftIdentity?.registration
+    || flight.flightNumber
+    || flight.callsign
+    || flight.aircraft.registration
+    || 'Unknown flight';
+  const secondaryIdentifier = aircraftIdentity
+    ? [flight.flightNumber, flight.callsign].find((value) => value && value !== primaryIdentifier)
+    : flight.callsign && flight.callsign !== flight.flightNumber
+      ? flight.callsign
+      : flight.aircraft.registration;
+  const registryAttribution = getRegistryAttribution(flight);
   const status = getDisplayStatus(flight, isLingering);
   const logoTileStyle = {
     backgroundColor: '#F4F4F5',
@@ -109,7 +136,7 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
               >
                 <img
                   src={airlineLogo}
-                  alt={airline.name}
+                  alt={displayName}
                   className="max-w-full max-h-full object-contain drop-shadow-sm"
                   onError={() => setLogoFailed(true)}
                 />
@@ -124,7 +151,7 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
             )}
             <div className="min-w-0">
               <h1 className="text-5xl font-bold text-foreground tracking-tight truncate">
-                {airline.name}
+                {displayName}
               </h1>
               <div className="flex items-center gap-3 mt-1.5 min-w-0">
                 <span className="font-mono text-2xl font-semibold" style={{ color: accent }}>
@@ -172,6 +199,11 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
                 </div>
                 <div className="mt-3 font-mono text-sm text-muted-foreground text-center">{aircraftName}</div>
                 <div className="font-mono text-xs text-muted-foreground/70">{flight.aircraft.registration}</div>
+                {registryAttribution && (
+                  <div className="mt-1 max-w-60 truncate text-center text-xs text-muted-foreground/70">
+                    {registryAttribution}
+                  </div>
+                )}
               </div>
 
               <div className="text-center flex-1 min-w-0">
@@ -204,6 +236,11 @@ const FlightCard = ({ flight, isLingering = false }: FlightCardProps) => {
                 <Plane className="w-12 h-12 rotate-90 mb-4" style={{ color: accent }} />
                 <div className="text-2xl font-semibold text-foreground leading-tight">{aircraftName}</div>
                 <div className="font-mono text-lg text-muted-foreground mt-2">{flight.aircraft.registration || 'Registration unknown'}</div>
+                {registryAttribution && (
+                  <div className="mt-3 text-sm leading-snug text-muted-foreground/75">
+                    {registryAttribution}
+                  </div>
+                )}
               </div>
             </div>
           </div>

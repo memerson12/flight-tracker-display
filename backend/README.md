@@ -29,11 +29,13 @@ Data locations
 - Photos: `backend/photos/`
 - Thumbnails: `backend/photos/thumbs/`
 - Metadata DB: `backend/data/photos.db` (SQLite, created automatically and migrated from the legacy public path)
+- Aircraft registry cache: `backend/data/aircraft-registry.db` (FAA and CASA; organizational names only, no addresses)
 
 Run
 
 - Start server: `pnpm start` (or `node server.js`)
 - Run tests: `pnpm test`
+- Force-refresh the local aircraft registry: `pnpm update:aircraft-registry -- --force`
 
 API (high-level)
 
@@ -56,3 +58,4 @@ Notes
 - Upload size limit defaults to 25MB per photo and can be changed with the `MAX_PHOTO_SIZE` environment variable (in bytes).
 - Rate limiting applies to uploads (10 uploads per minute per IP).
 - Photo uploads are auto-oriented and re-encoded without public EXIF metadata. When GPS is embedded, the backend stores the coordinates privately and uses `MAPBOX_TOKEN` or `VITE_MAPBOX_TOKEN` to create the coarse location label returned by the API.
+- Unknown operators can be classified as business jets from their ICAO type or registry model. Registry imports discard individual names and all address fields; only organizational registered holders/operators can be displayed.

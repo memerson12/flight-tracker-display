@@ -33,4 +33,44 @@ describe('FlightCard', () => {
     expect(screen.getAllByText('—')).toHaveLength(4);
     expect(screen.queryByText('0')).not.toBeInTheDocument();
   });
+
+  it('replaces an unknown airline with a registry-enriched business jet identity', () => {
+    render(<FlightCard flight={{
+      ...flight,
+      flightNumber: '',
+      callsign: 'N123AB',
+      airline: { name: 'Unknown Airline', iata: '', icao: '', resolutionSource: 'unknown' },
+      aircraft: {
+        type: 'GLF6',
+        icao: 'GLF6',
+        registration: 'N123AB',
+        identity: {
+          category: 'business-jet',
+          label: 'Business Jet',
+          registration: 'N123AB',
+          manufacturer: 'Gulfstream',
+          model: 'G650',
+          registeredName: 'EXAMPLE AVIATION LLC',
+          relationship: 'registered-owner',
+          registry: 'FAA'
+        }
+      }
+    }} />);
+
+    expect(screen.getByRole('heading', { name: 'Business Jet' })).toBeInTheDocument();
+    expect(screen.getByText('Registered to EXAMPLE AVIATION LLC')).toBeInTheDocument();
+    expect(screen.queryByText('Unknown Airline')).not.toBeInTheDocument();
+  });
+
+  it('labels a completely unidentified flight as unknown aircraft', () => {
+    render(<FlightCard flight={{
+      ...flight,
+      flightNumber: '',
+      callsign: 'UNKNOWN1',
+      airline: { name: 'Unknown Airline', iata: '', icao: '', resolutionSource: 'unknown' }
+    }} />);
+
+    expect(screen.getByRole('heading', { name: 'Unknown Aircraft' })).toBeInTheDocument();
+    expect(screen.queryByText('Unknown Airline')).not.toBeInTheDocument();
+  });
 });

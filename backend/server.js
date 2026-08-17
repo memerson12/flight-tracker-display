@@ -5,6 +5,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const { createFlightAdapter, validateProviderConfig } = require('./adapters');
 const { normalizeFlightData } = require('./lib/flightNormalizer');
+const { scheduleAircraftRegistryUpdates } = require('./lib/aircraftRegistryScheduler');
 const { withObserverBearings } = require('./lib/observerBearing');
 const { writeJsonAtomic } = require('./lib/atomicJsonStore');
 const adminAuth = require('./middleware/adminAuth');
@@ -408,6 +409,7 @@ if (require.main === module) {
         console.log(`Flight tracker server running at http://localhost:${PORT}`);
         console.log(`Flight data provider: ${flightAdapter?.name || 'none'}`);
         console.log('Ready to track flights! 🛩️');
+        scheduleAircraftRegistryUpdates();
     });
 
     process.on('SIGINT', () => {

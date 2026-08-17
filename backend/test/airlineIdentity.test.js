@@ -212,6 +212,23 @@ describe('normalized flight airline contract', function() {
       resolutionSource: 'marketing-flight-number'
     });
   });
+
+  it('classifies an unknown operator with a business-jet type', function() {
+    const flight = normalizeFlight({
+      id: 'business-jet',
+      icao24: 'abc124',
+      callsign: 'N123AB',
+      aircraft: 'GLF6',
+      registration: 'N123AB',
+      latitude: 37.5,
+      longitude: -122.4
+    });
+
+    assert.strictEqual(flight.airline.resolutionSource, 'unknown');
+    assert.strictEqual(flight.aircraft.identity.category, 'business-jet');
+    assert.strictEqual(flight.aircraft.identity.label, 'Business Jet');
+    assert.strictEqual(flight.aircraft.identity.registration, 'N123AB');
+  });
 });
 
 describe('normalized flight telemetry contract', function() {

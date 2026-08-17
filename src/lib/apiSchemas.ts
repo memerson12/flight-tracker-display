@@ -23,7 +23,18 @@ export const flightSchema = z.object({
   aircraft: z.object({
     type: z.string(),
     icao: z.string(),
-    registration: z.string()
+    registration: z.string(),
+    identity: z.object({
+      category: z.literal('business-jet'),
+      label: z.string(),
+      brandCode: z.string().optional(),
+      registration: z.string(),
+      manufacturer: z.string().optional(),
+      model: z.string().optional(),
+      registeredName: z.string().optional(),
+      relationship: z.enum(['registered-owner', 'registered-operator', 'registered-holder', '']).optional(),
+      registry: z.enum(['FAA', 'CASA', '']).optional()
+    }).optional()
   }),
   departure: airportSchema,
   arrival: airportSchema,
