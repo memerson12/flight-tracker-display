@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     strictPort: true,
+    allowedHosts: ["flight-tracker.local"],
     proxy: {
       "/api": "http://localhost:8000",
       "/photos": "http://localhost:8000",
