@@ -68,6 +68,14 @@ describe('airline identity resolution', function() {
     }
   });
 
+  it('maps the non-standard LR identifier to Link Airways globally', function() {
+    const identity = resolveAirlineIdentity({ flightNumber: 'LR442', callsign: 'LR442' });
+    assert.strictEqual(identity.displayCode, 'FC');
+    assert.strictEqual(identity.name, 'Link Airways');
+    assert.strictEqual(identity.iata, 'LR');
+    assert.strictEqual(identity.resolutionSource, 'marketing-flight-number');
+  });
+
   it('does not manufacture an airline from an unknown ICAO prefix or registration', function() {
     assert.deepStrictEqual(resolveAirlineIdentity({ callsign: 'XYZ123' }), {
       displayCode: '',

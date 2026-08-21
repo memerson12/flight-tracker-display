@@ -93,3 +93,15 @@ describe('ICAO airline code mapping', () => {
     expect(extractAirlineCode(identifier)).toBe(expectedCode);
   });
 });
+
+describe('Link Airways flight identifier overrides', () => {
+  it('maps the non-standard LR identifier to Link Airways globally', () => {
+    expect(extractAirlineCode('LR442')).toBe('FC');
+    expect(resolveFlightAirlineCode({ flightNumber: 'LR442', callsign: 'LR442' })).toBe('FC');
+    expect(getAirline('LR')).toMatchObject({
+      name: 'Link Airways',
+      color: '#1775BC'
+    });
+    expect(getLogoUrl('LR')).toBe('https://www.gstatic.com/flights/airline_logos/70px/FC.png');
+  });
+});

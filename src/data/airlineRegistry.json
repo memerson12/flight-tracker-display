@@ -62,7 +62,7 @@
   { "key": "AL", "name": "Aerlink", "iata": "AL", "icao": [], "color": "#159A9C", "region": "Oceania", "alliance": null },
   { "key": "PX", "name": "Air Niugini", "iata": "PX", "icao": ["ANG"], "color": "#F7941D", "region": "Oceania", "alliance": null },
   { "key": "FJ", "name": "Fiji Airways", "iata": "FJ", "icao": ["FJI"], "color": "#8A6E4B", "region": "Oceania", "alliance": "oneworld" },
-  { "key": "FC", "name": "Link Airways", "iata": "FC", "icao": ["FCA"], "color": "#1775BC", "region": "Oceania", "alliance": null },
+  { "key": "FC", "name": "Link Airways", "iata": "FC", "iataAliases": ["LR"], "icao": ["FCA"], "color": "#1775BC", "region": "Oceania", "alliance": null },
   { "key": "NC", "name": "National Jet Express", "iata": "NC", "icao": ["JTE"], "color": "#E87722", "region": "Oceania", "alliance": null },
   { "key": "ON", "name": "Nauru Airlines", "iata": "ON", "icao": ["RON"], "color": "#1E4D7B", "region": "Oceania", "alliance": null },
   { "key": "GD", "name": "Nexus Airlines", "iata": "GD", "icao": [], "color": "#006F62", "region": "Oceania", "alliance": null },

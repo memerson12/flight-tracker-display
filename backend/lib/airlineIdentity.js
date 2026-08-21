@@ -10,6 +10,10 @@ for (const record of registry) {
   for (const icao of record.icao || []) recordsByIcao.set(icao, record);
 }
 
+for (const record of registry) {
+  for (const iata of record.iataAliases || []) recordsByIata.set(iata, record);
+}
+
 function normalizeIdentifier(value) {
   return String(value || '').trim().toUpperCase();
 }

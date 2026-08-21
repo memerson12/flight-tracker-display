@@ -11,6 +11,7 @@ export type AirlineInfo = {
 type AirlineRegistryRecord = AirlineInfo & {
   key: string;
   iata: string;
+  iataAliases?: string[];
   icao: string[];
   preferOperatorBrand?: boolean;
 };
@@ -26,6 +27,9 @@ const airlines: Record<string, AirlineInfo> = Object.fromEntries(
 const airlineCodeAliases: Record<string, string> = {};
 
 registry.forEach((record) => {
+  record.iataAliases?.forEach((iata) => {
+    airlineCodeAliases[iata] = record.key;
+  });
   record.icao.forEach((icao) => {
     airlineCodeAliases[icao] = record.key;
   });
@@ -283,7 +287,8 @@ export const extractAirlineCode = (flightNumber: string) => {
 
   const twoCharacterMatch = normalized.match(/^([A-Z0-9]{2})(?=\d|$)/);
   const twoCharacterCode = twoCharacterMatch?.[1] || '';
-  return airlines[twoCharacterCode] ? twoCharacterCode : '';
+  return airlineCodeAliases[twoCharacterCode]
+    || (airlines[twoCharacterCode] ? twoCharacterCode : '');
 };
 
 export const resolveAirlineCode = (...identifiers: Array<string | undefined>) => {
